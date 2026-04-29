@@ -59,6 +59,8 @@ jobs:
         if: ${{ inputs.dokploy_app_id != '' }}
         run: |
           curl -X POST https://dokploy.admin.rawz06.fr/api/application.deploy \
-            -H "Authorization: Bearer ${{ secrets.DOKPLOY_TOKEN }}" \
+            -H "accept: application/json" \
+            -H "x-api-key: ${{ secrets.DOKPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{"applicationId": "${{ inputs.dokploy_app_id }}"}'
+
