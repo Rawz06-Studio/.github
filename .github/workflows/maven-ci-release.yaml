@@ -65,17 +65,21 @@ jobs:
           RELEASE_VERSION=${VERSION%-SNAPSHOT}
           echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Set release version (remove SNAPSHOT)
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set release version
         run: |
           mvn versions:set -DnewVersion=${{ steps.get_version.outputs.release_version }} \
             -DgenerateBackupPoms=false --no-transfer-progress
 
-      - name: Commit release version
+      - name: Commit & push release version
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add pom.xml
-          git commit -m "release ${{ steps.get_version.outputs.release_version }}"
+          git commit -m "🔖 release ${{ steps.get_version.outputs.release_version }} [skip ci]"
+          git push origin HEAD
 
       - name: Deploy artifact to Nexus
         run: mvn deploy -DskipTests --no-transfer-progress
@@ -98,8 +102,8 @@ jobs:
           mvn versions:set -DnewVersion=${{ steps.next_version.outputs.next_snapshot }} \
             -DgenerateBackupPoms=false --no-transfer-progress
 
-      - name: Commit next SNAPSHOT
+      - name: Commit & push next SNAPSHOT
         run: |
           git add pom.xml
-          git commit -m "prepare ${{ steps.next_version.outputs.next_snapshot }}"
+          git commit -m "🔧 prepare ${{ steps.next_version.outputs.next_snapshot }} [skip ci]"
           git push origin HEAD
