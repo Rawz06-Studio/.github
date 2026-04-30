@@ -1,0 +1,66 @@
+name: Reusable JS CI
+
+on:
+  workflow_call:
+    inputs:
+      node_version:
+        required: false
+        type: string
+        default: '22'
+    secrets:
+      NEXUS_LOGIN:
+        required: false
+      NEXUS_PASSWORD:
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+          cache: pnpm
+
+      - name: Configure .npmrc for Nexus
+        run: |
+          TOKEN=$(echo -n "${{ secrets.NEXUS_LOGIN }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
+          cat > .npmrc <<EOF
+          registry=${{ vars.NEXUS_URL }}/repository/npm-proxy/
+          //${{ vars.NEXUS_DOMAIN }}/repository/npm-proxy/:_auth=${TOKEN}
+          //${{ vars.NEXUS_DOMAIN }}/repository/npm-hosted/:_auth=${TOKEN}
+          always-auth=true
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check available scripts
+        id: check_scripts
+        run: |
+          HAS_LINT=$(node -e "const p=require('./package.json'); console.log(p.scripts?.lint ? 'true' : 'false')")
+          HAS_TEST=$(node -e "const p=require('./package.json'); console.log(p.scripts?.test ? 'true' : 'false')")
+          HAS_BUILD=$(node -e "const p=require('./package.json'); console.log(p.scripts?.build ? 'true' : 'false')")
+          echo "has_lint=$HAS_LINT" >> $GITHUB_OUTPUT
+          echo "has_test=$HAS_TEST" >> $GITHUB_OUTPUT
+          echo "has_build=$HAS_BUILD" >> $GITHUB_OUTPUT
+
+      - name: Lint
+        if: steps.check_scripts.outputs.has_lint == 'true'
+        run: pnpm run lint
+
+      - name: Test
+        if: steps.check_scripts.outputs.has_test == 'true'
+        run: pnpm run test
+
+      - name: Build
+        if: steps.check_scripts.outputs.has_build == 'true'
+        run: pnpm run build
