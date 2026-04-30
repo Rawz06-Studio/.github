@@ -1,0 +1,98 @@
+name: Reusable Maven CI Release
+
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        required: false
+        type: string
+        default: '21'
+    secrets:
+      NEXUS_LOGIN:
+        required: true
+      NEXUS_PASSWORD:
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: temurin
+
+      - name: Configure Maven settings (Nexus)
+        run: |
+          mkdir -p ~/.m2
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>nexus</id>
+                <username>${{ secrets.NEXUS_LOGIN }}</username>
+                <password>${{ secrets.NEXUS_PASSWORD }}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+
+      - name: Build & Test
+        run: mvn clean verify --no-transfer-progress
+
+      - name: Get current version
+        id: get_version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "snapshot_version=$VERSION" >> $GITHUB_OUTPUT
+          RELEASE_VERSION=${VERSION%-SNAPSHOT}
+          echo "release_version=$RELEASE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set release version (remove SNAPSHOT)
+        run: |
+          mvn versions:set -DnewVersion=${{ steps.get_version.outputs.release_version }} \
+            -DgenerateBackupPoms=false --no-transfer-progress
+
+      - name: Commit release version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pom.xml
+          git commit -m "release ${{ steps.get_version.outputs.release_version }}"
+
+      - name: Deploy artifact to Nexus
+        run: mvn deploy -DskipTests --no-transfer-progress
+
+      - name: Tag release
+        run: |
+          git tag v${{ steps.get_version.outputs.release_version }}
+          git push origin v${{ steps.get_version.outputs.release_version }}
+
+      - name: Compute next SNAPSHOT version
+        id: next_version
+        run: |
+          RELEASE="${{ steps.get_version.outputs.release_version }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE"
+          NEXT="$MAJOR.$MINOR.$((PATCH + 1))-SNAPSHOT"
+          echo "next_snapshot=$NEXT" >> $GITHUB_OUTPUT
+
+      - name: Set next SNAPSHOT version
+        run: |
+          mvn versions:set -DnewVersion=${{ steps.next_version.outputs.next_snapshot }} \
+            -DgenerateBackupPoms=false --no-transfer-progress
+
+      - name: Commit next SNAPSHOT
+        run: |
+          git add pom.xml
+          git commit -m "prepare ${{ steps.next_version.outputs.next_snapshot }}"
+          git push origin HEAD
