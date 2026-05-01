@@ -72,7 +72,22 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Bump patch version
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
       - name: Publish to Nexus
         if: inputs.publishable == true
         run: pnpm publish --no-git-checks --access public --registry ${{ vars.NEXUS_URL }}/repository/npm-hosted/
+
+      - name: Commit & Tag
+        run: |
+          git add package.json
+          git add pnpm-lock.yaml 2>/dev/null || true
+          git commit -m "🔖 release ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git push origin HEAD
 
