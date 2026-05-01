@@ -1,4 +1,4 @@
-name: Reusable Maven CI Release
+name: Reusable Maven CI Snapshot
 
 on:
   workflow_call:
