@@ -44,6 +44,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase
 
       - name: Compute next SNAPSHOT version
         id: next_version
@@ -60,7 +61,6 @@ jobs:
 
       - name: Commit & push next SNAPSHOT
         run: |
-          git pull --rebase
           git add pom.xml
           if git diff --staged --quiet; then
             echo "pom.xml already at SNAPSHOT version, nothing to commit"
