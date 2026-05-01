@@ -29,8 +29,8 @@ Il suffit de les appeler depuis vos projets sans rien copier.
 |---|---|---|
 | `maven-ci.yml` | Toutes branches | Build + test Maven |
 | `maven-ci-release.yml` | `main` uniquement | Build + test + bump + deploy Nexus |
-| `js-ci.yml` | Toutes branches | Install + lint + test + build JS |
-| `js-ci-release.yml` | `main` uniquement | + bump version + publish Nexus optionnel |
+| `node-ci.yml` | Toutes branches | Install + lint + test + build JS |
+| `node-ci-release.yml` | `main` uniquement | + bump version + publish Nexus optionnel |
 
 ---
 
@@ -53,7 +53,7 @@ on:
 
 jobs:
   ci:
-    uses: votre-org/workflows/.github/workflows/maven-ci.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/maven-ci.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -73,7 +73,7 @@ on:
 
 jobs:
   release:
-    uses: votre-org/workflows/.github/workflows/maven-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -86,7 +86,7 @@ jobs:
 ```yaml
 jobs:
   release:
-    uses: votre-org/workflows/.github/workflows/maven-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
     with:
       java_version: '17'       # ← changer ici
     secrets:
@@ -113,7 +113,7 @@ on:
 
 jobs:
   ci:
-    uses: votre-org/workflows/.github/workflows/js-ci.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -133,7 +133,7 @@ on:
 
 jobs:
   release:
-    uses: votre-org/workflows/.github/workflows/js-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: false       # application, pas de publish npm
     secrets:
@@ -160,7 +160,7 @@ on:
 
 jobs:
   ci:
-    uses: votre-org/workflows/.github/workflows/js-ci.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -180,7 +180,7 @@ on:
 
 jobs:
   release:
-    uses: votre-org/workflows/.github/workflows/js-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: true        # ← lib publiée sur Nexus npm
     secrets:
@@ -205,13 +205,13 @@ on:
 
 jobs:
   ci-back:
-    uses: votre-org/workflows/.github/workflows/maven-ci.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/maven-ci.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 
   ci-front:
-    uses: votre-org/workflows/.github/workflows/js-ci.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
@@ -229,14 +229,14 @@ on:
 
 jobs:
   release-back:
-    uses: votre-org/workflows/.github/workflows/maven-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
     secrets:
       NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
       NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 
   release-front:
     needs: release-back          # ← séquencer si nécessaire, sinon supprimer
-    uses: votre-org/workflows/.github/workflows/js-ci-release.yml@main
+    uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: false
     secrets:
@@ -284,7 +284,7 @@ updates:
 |---|---|---|---|
 | `java_version` | string | `21` | Version du JDK |
 
-### `js-ci.yml` / `js-ci-release.yml`
+### `node-ci.yml` / `node-ci-release.yml`
 
 | Input | Type | Défaut | Description |
 |---|---|---|---|
