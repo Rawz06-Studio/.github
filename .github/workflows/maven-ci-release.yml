@@ -82,7 +82,10 @@ jobs:
           git push origin HEAD
 
       - name: Deploy artifact to Nexus
-        run: mvn deploy -DskipTests --no-transfer-progress
+        run: |
+          mvn deploy -DskipTests --no-transfer-progress \
+            -DaltDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-releases/ \
+            -DaltSnapshotDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-snapshots/
 
       - name: Tag release
         run: |
