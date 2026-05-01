@@ -88,6 +88,6 @@ jobs:
         run: |
           git add package.json
           git add pnpm-lock.yaml 2>/dev/null || true
-          git commit -m "🔖 release ${{ steps.bump.outputs.new_version }} [skip ci]"
+          git commit -m "🔖 patch ${{ steps.bump.outputs.new_version }} [skip ci]"
           git push origin HEAD
 
