@@ -94,7 +94,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "pom.xml already at release version, nothing to commit"
           else
-            git commit -m "🔖 release ${{ steps.get_version.outputs.release_version }} [skip ci]"
+            git commit -m "🔖 snapshot ${{ steps.get_version.outputs.release_version }} [skip ci]"
             git push origin HEAD
           fi
 
