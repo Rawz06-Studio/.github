@@ -7,11 +7,6 @@ on:
         required: false
         type: string
         default: '21'
-    secrets:
-      NEXUS_LOGIN:
-        required: true
-      NEXUS_PASSWORD:
-        required: true
 
 jobs:
   release:
