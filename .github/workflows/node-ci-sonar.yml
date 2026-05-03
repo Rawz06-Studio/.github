@@ -8,10 +8,6 @@ on:
         type: string
         default: '24'
     secrets:
-      NEXUS_LOGIN:
-        required: true
-      NEXUS_PASSWORD:
-        required: true
       SONAR_TOKEN:
         required: true
       SONAR_HOST_URL:
@@ -24,31 +20,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ inputs.node_version }}
-          cache: pnpm
-
-      - name: Configure .npmrc for Nexus
-        run: |
-          TOKEN=$(echo -n "${{ secrets.NEXUS_LOGIN }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
-          cat > .npmrc <<EOF
-          registry=${{ vars.NEXUS_URL }}/repository/npm-proxy/
-          //${{ vars.NEXUS_DOMAIN }}/repository/npm-proxy/:_auth=${TOKEN}
-          //${{ vars.NEXUS_DOMAIN }}/repository/npm-hosted/:_auth=${TOKEN}
-          always-auth=true
-          EOF
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm run build
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
