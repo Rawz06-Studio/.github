@@ -51,8 +51,30 @@ jobs:
                 <url>${{ vars.NEXUS_URL }}/repository/maven-public/</url>
               </mirror>
             </mirrors>
+            <profiles>
+              <profile>
+                <id>nexus</id>
+                <properties>
+                  <!-- Timeout en ms -->
+                  <maven.wagon.http.pool>false</maven.wagon.http.pool>
+                  <maven.wagon.httpconnectionManager.ttlSeconds>120</maven.wagon.httpconnectionManager.ttlSeconds>
+                  <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
+                </properties>
+              </profile>
+            </profiles>
+            <activeProfiles>
+              <activeProfile>nexus</activeProfile>
+            </activeProfiles>
           </settings>
           EOF
+      
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
       - name: Build & Test
         run: mvn clean verify --no-transfer-progress
@@ -82,7 +104,7 @@ jobs:
 
       - name: Commit & push release version
         run: |
-          git add pom.xml
+          git add pom.xml "**/pom.xml" 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "pom.xml already at release version, nothing to commit"
           else
@@ -91,10 +113,14 @@ jobs:
           fi
 
       - name: Deploy artifact to Nexus
+        if: inputs.publishable == true
         run: |
           mvn deploy -DskipTests --no-transfer-progress \
-            -DaltDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-releases/ \
-            -DaltSnapshotDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-snapshots/
+            -DaltDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-releases/
+
+      - name: Build only (sans publish)
+        if: inputs.publishable == false
+        run: mvn package -DskipTests --no-transfer-progress
 
       - name: Tag release
         run: |

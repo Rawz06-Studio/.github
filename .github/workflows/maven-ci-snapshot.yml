@@ -61,7 +61,7 @@ jobs:
 
       - name: Commit & push next SNAPSHOT
         run: |
-          git add pom.xml
+          git add pom.xml "**/pom.xml" 2>/dev/null || true
           if git diff --staged --quiet; then
             echo "pom.xml already at SNAPSHOT version, nothing to commit"
           else

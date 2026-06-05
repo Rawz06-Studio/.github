@@ -64,6 +64,20 @@ jobs:
                 <url>${{ vars.NEXUS_URL }}/repository/maven-public/</url>
               </mirror>
             </mirrors>
+            <profiles>
+              <profile>
+                <id>nexus</id>
+                <properties>
+                  <!-- Timeout en ms -->
+                  <maven.wagon.http.pool>false</maven.wagon.http.pool>
+                  <maven.wagon.httpconnectionManager.ttlSeconds>120</maven.wagon.httpconnectionManager.ttlSeconds>
+                  <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
+                </properties>
+              </profile>
+            </profiles>
+            <activeProfiles>
+              <activeProfile>nexus</activeProfile>
+            </activeProfiles>
           </settings>
           EOF
       - name: Build and analyze

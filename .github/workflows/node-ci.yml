@@ -32,16 +32,29 @@ jobs:
 
       - name: Configure .npmrc for Nexus
         run: |
-          TOKEN=$(echo -n "${{ secrets.NEXUS_LOGIN }}:${{ secrets.NEXUS_PASSWORD }}" | base64)
+          TOKEN=$(echo -n "${{ secrets.NEXUS_LOGIN }}:${{ secrets.NEXUS_PASSWORD }}" | base64 -w 0)
           cat > .npmrc <<EOF
           registry=${{ vars.NEXUS_URL }}/repository/npm-proxy/
           //${{ vars.NEXUS_DOMAIN }}/repository/npm-proxy/:_auth=${TOKEN}
           //${{ vars.NEXUS_DOMAIN }}/repository/npm-hosted/:_auth=${TOKEN}
           always-auth=true
+          fetch-timeout=60000
+          fetch-retry-mintimeout=20000
+          fetch-retry-maxtimeout=120000
+          fetch-retries=5
+          network-concurrency=4
           EOF
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Check available scripts
         id: check_scripts
