@@ -104,7 +104,7 @@ jobs:
 
       - name: Commit & push release version
         run: |
-          git add pom.xml "**/pom.xml" 2>/dev/null || true
+          git add ':(glob)**/pom.xml'
           if git diff --staged --quiet; then
             echo "pom.xml already at release version, nothing to commit"
           else
