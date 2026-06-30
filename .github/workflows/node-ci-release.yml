@@ -11,18 +11,14 @@ on:
         required: false
         type: boolean
         default: false
-        description: 'Publier le package sur Nexus (true pour les libs)'
-    secrets:
-      NEXUS_LOGIN:
-        required: true
-      NEXUS_PASSWORD:
-        required: true
+        description: 'Publier le package sur GitHub Packages (true pour les libs)'
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -40,19 +36,12 @@ jobs:
           node-version: ${{ inputs.node_version }}
           cache: pnpm
 
-      - name: Configure .npmrc for Nexus
+      - name: Configure .npmrc for GitHub Packages
         run: |
-          TOKEN=$(echo -n "${{ secrets.NEXUS_LOGIN }}:${{ secrets.NEXUS_PASSWORD }}" | base64 -w 0)
           cat > .npmrc <<EOF
-          registry=${{ vars.NEXUS_URL }}/repository/npm-proxy/
-          //${{ vars.NEXUS_DOMAIN }}/repository/npm-proxy/:_auth=${TOKEN}
-          //${{ vars.NEXUS_DOMAIN }}/repository/npm-hosted/:_auth=${TOKEN}
+          @Rawz06-Studio:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=\${{ secrets.GITHUB_TOKEN }}
           always-auth=true
-          fetch-timeout=60000
-          fetch-retry-mintimeout=20000
-          fetch-retry-maxtimeout=120000
-          fetch-retries=5
-          network-concurrency=4
           EOF
 
       - name: Cache pnpm store
@@ -93,9 +82,9 @@ jobs:
           NEW_VERSION=$(npm version minor --no-git-tag-version)
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Publish to Nexus
+      - name: Publish to GitHub Packages
         if: inputs.publishable == true
-        run: pnpm publish --no-git-checks --access public --registry ${{ vars.NEXUS_URL }}/repository/npm-hosted/
+        run: pnpm publish --no-git-checks --access public --registry https://npm.pkg.github.com/
 
       - name: Commit & Tag
         run: |

@@ -7,19 +7,7 @@ Il suffit de les appeler depuis vos projets sans rien copier.
 
 ## Prérequis
 
-### Variables d'organisation (ou de dépôt)
-
-| Variable | Exemple |
-|---|---|
-| `vars.NEXUS_URL` | `https://nexus.mondomaine.fr` |
-| `vars.NEXUS_DOMAIN` | `nexus.mondomaine.fr` |
-
-### Secrets d'organisation (ou de dépôt)
-
-| Secret | Usage |
-|---|---|
-| `NEXUS_LOGIN` | Compte technique Nexus |
-| `NEXUS_PASSWORD` | Mot de passe compte technique Nexus |
+L'authentification se fait via le `GITHUB_TOKEN` généré automatiquement par GitHub Actions. Assurez-vous que le workflow possède les permissions nécessaires (`packages: write` pour la publication, `packages: read` pour la récupération des dépendances internes).
 
 ---
 
@@ -28,9 +16,9 @@ Il suffit de les appeler depuis vos projets sans rien copier.
 | Workflow | Déclencheur conseillé | Usage |
 |---|---|---|
 | `maven-ci.yml` | Toutes branches | Build + test Maven |
-| `maven-ci-release.yml` | `main` uniquement | Build + test + bump + deploy Nexus |
+| `maven-ci-release.yml` | `main` uniquement | Build + test + bump + deploy GitHub Packages |
 | `node-ci.yml` | Toutes branches | Install + lint + test + build JS |
-| `node-ci-release.yml` | `main` uniquement | + bump version + publish Nexus optionnel |
+| `node-ci-release.yml` | `main` uniquement | + bump version + publish GitHub Packages optionnel |
 
 ---
 
@@ -54,9 +42,6 @@ on:
 jobs:
   ci:
     uses: RawZ06-Studio/.github/.github/workflows/maven-ci.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 **Release sur main**
@@ -74,9 +59,8 @@ on:
 jobs:
   release:
     uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+    with:
+      publishable: true
 ```
 
 ---
@@ -89,9 +73,7 @@ jobs:
     uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
     with:
       java_version: '17'       # ← changer ici
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+      publishable: true
 ```
 
 ---
@@ -114,9 +96,6 @@ on:
 jobs:
   ci:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 **Release sur main**
@@ -136,14 +115,11 @@ jobs:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: false       # application, pas de publish npm
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 ---
 
-### Librairie JS (publiée sur Nexus npm)
+### Librairie JS (publiée sur GitHub Packages)
 
 **CI sur toutes les branches**
 
@@ -161,9 +137,6 @@ on:
 jobs:
   ci:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 **Release sur main**
@@ -182,10 +155,7 @@ jobs:
   release:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
-      publishable: true        # ← lib publiée sur Nexus npm
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+      publishable: true        # ← lib publiée sur GitHub Packages
 ```
 
 ---
@@ -206,15 +176,9 @@ on:
 jobs:
   ci-back:
     uses: RawZ06-Studio/.github/.github/workflows/maven-ci.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 
   ci-front:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 `.github/workflows/release.yml`
@@ -230,18 +194,14 @@ on:
 jobs:
   release-back:
     uses: RawZ06-Studio/.github/.github/workflows/maven-ci-release.yml@main
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+    with:
+      publishable: true
 
   release-front:
     needs: release-back          # ← séquencer si nécessaire, sinon supprimer
     uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: false
-    secrets:
-      NEXUS_LOGIN: ${{ secrets.NEXUS_LOGIN }}
-      NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
 ```
 
 ---
@@ -289,4 +249,4 @@ updates:
 | Input | Type | Défaut | Description |
 |---|---|---|---|
 | `node_version` | string | `22` | Version de Node |
-| `publishable` | boolean | `false` | Publier sur Nexus npm (`release` uniquement) |
+| `publishable` | boolean | `false` | Publier sur GitHub Packages (`release` uniquement) |

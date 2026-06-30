@@ -7,17 +7,17 @@ on:
         required: false
         type: string
         default: '21'
-    secrets:
-      NEXUS_LOGIN:
-        required: true
-      NEXUS_PASSWORD:
-        required: true
+      publishable:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
 
     steps:
       - name: Checkout
@@ -32,39 +32,18 @@ jobs:
           java-version: ${{ inputs.java_version }}
           distribution: temurin
 
-      - name: Configure Maven settings (Nexus)
+      - name: Configure Maven settings (GitHub Packages)
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<EOF
           <settings>
             <servers>
               <server>
-                <id>nexus</id>
-                <username>${{ secrets.NEXUS_LOGIN }}</username>
-                <password>${{ secrets.NEXUS_PASSWORD }}</password>
+                <id>github</id>
+                <username>\${{ github.actor }}</username>
+                <password>\${{ secrets.GITHUB_TOKEN }}</password>
               </server>
             </servers>
-            <mirrors>
-              <mirror>
-                <id>nexus</id>
-                <mirrorOf>*</mirrorOf>
-                <url>${{ vars.NEXUS_URL }}/repository/maven-public/</url>
-              </mirror>
-            </mirrors>
-            <profiles>
-              <profile>
-                <id>nexus</id>
-                <properties>
-                  <!-- Timeout en ms -->
-                  <maven.wagon.http.pool>false</maven.wagon.http.pool>
-                  <maven.wagon.httpconnectionManager.ttlSeconds>120</maven.wagon.httpconnectionManager.ttlSeconds>
-                  <maven.wagon.http.retryHandler.count>5</maven.wagon.http.retryHandler.count>
-                </properties>
-              </profile>
-            </profiles>
-            <activeProfiles>
-              <activeProfile>nexus</activeProfile>
-            </activeProfiles>
           </settings>
           EOF
       
@@ -112,11 +91,11 @@ jobs:
             git push origin HEAD
           fi
 
-      - name: Deploy artifact to Nexus
+      - name: Deploy artifact to GitHub Packages
         if: inputs.publishable == true
         run: |
           mvn deploy -DskipTests --no-transfer-progress \
-            -DaltDeploymentRepository=nexus::${{ vars.NEXUS_URL }}/repository/maven-releases/
+            -DaltDeploymentRepository=github::https://maven.pkg.github.com/Rawz06-Studio/${GITHUB_REPOSITORY#*/}
 
       - name: Build only (sans publish)
         if: inputs.publishable == false
