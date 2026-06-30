@@ -7,7 +7,18 @@ Il suffit de les appeler depuis vos projets sans rien copier.
 
 ## Prérequis
 
-L'authentification se fait via le `GITHUB_TOKEN` généré automatiquement par GitHub Actions. Assurez-vous que le workflow possède les permissions nécessaires (`packages: write` pour la publication, `packages: read` pour la récupération des dépendances internes).
+L'authentification se fait via le `GITHUB_TOKEN` généré automatiquement par GitHub Actions. 
+
+### Permissions
+Pour que les workflows puissent fonctionner (pousser des images, créer des releases), vous devez accorder les permissions nécessaires dans le workflow appelant.
+
+Si votre dépôt est configuré en "Read-only" par défaut, ajoutez un bloc `permissions` à votre job :
+
+```yaml
+permissions:
+  contents: write
+  packages: write
+```
 
 ---
 
@@ -202,6 +213,30 @@ jobs:
     uses: RawZ06-Studio/.github/.github/workflows/node-ci-release.yml@main
     with:
       publishable: false
+```
+
+---
+
+### Application Docker (Build & Push sur GHCR)
+
+`.github/workflows/docker-publish.yml`
+
+```yaml
+name: Docker Publish
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    uses: RawZ06-Studio/.github/.github/workflows/docker-build-push.yml@main
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image_name: my-app-name
 ```
 
 ---
