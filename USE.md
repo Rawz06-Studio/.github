@@ -241,6 +241,29 @@ jobs:
 
 ---
 
+## Dépannage (Troubleshooting)
+
+### Erreur : `denied: installation not allowed to Create organization package`
+
+Si vous recevez cette erreur lors du push Docker, cela signifie que le `GITHUB_TOKEN` n'a pas l'autorisation de créer de nouveaux packages dans l'organisation.
+
+**Solutions à appliquer :**
+
+1.  **Vérifier les permissions du workflow (Dépôt) :**
+    *   Allez dans **Settings** -> **Actions** -> **General**.
+    *   Dans la section **Workflow permissions**, assurez-vous que **"Read and write permissions"** est sélectionné.
+    *   Cochez également **"Allow GitHub Actions to create and approve pull requests"** si nécessaire.
+
+2.  **Vérifier les paramètres des Packages (Organisation) :**
+    *   Allez dans les **Settings de l'Organisation** -> **Packages** -> **General**.
+    *   Vérifiez que **"Default to 'Inherit access from source repository' for all new container images"** est activé.
+    *   Sinon, vous devrez peut-être créer le package manuellement une première fois ou lier explicitement le dépôt au package s'il existe déjà.
+
+3.  **Permissions YAML :**
+    *   Assurez-vous d'avoir bien inclus le bloc `permissions` dans votre workflow appelant (voir exemples ci-dessus).
+
+---
+
 ## Dependabot
 
 Copier ce fichier dans chaque projet pour maintenir les dépendances à jour automatiquement.
