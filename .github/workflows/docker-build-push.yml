@@ -62,6 +62,11 @@ jobs:
         if: ${{ inputs.dokploy_app_id != '' }}
         run: |
           curl -X POST https://dokploy.admin.rawz06.fr/api/application.deploy \
+              --connect-timeout 10 \
+              --max-time 30 \
+              --retry 3 \
+              --retry-delay 5 \
+              --retry-connrefused \
             -H "accept: application/json" \
             -H "x-api-key: ${{ secrets.DOKPLOY_TOKEN }}" \
             -H "Content-Type: application/json" \
