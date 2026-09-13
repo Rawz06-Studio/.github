@@ -10,9 +10,6 @@ on:
         required: false
         type: string
         default: ''
-    secrets:
-      DOKPLOY_TOKEN:
-        required: false
 
 jobs:
   build-and-push:
@@ -63,14 +60,10 @@ jobs:
       - name: Trigger Dokploy Deploy
         if: ${{ inputs.dokploy_app_id != '' }}
         run: |
-          curl -X POST https://dokploy.admin.rawz06.fr/api/application.deploy \
+          curl -X GET https://dokploy.admin.rawz06.dev/api/deploy/${{ inputs.dokploy_app_id }} \
               --connect-timeout 10 \
               --max-time 30 \
               --retry 3 \
               --retry-delay 5 \
-              --retry-connrefused \
-            -H "accept: application/json" \
-            -H "x-api-key: ${{ secrets.DOKPLOY_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{"applicationId": "${{ inputs.dokploy_app_id }}"}'
+              --retry-connrefused
 
