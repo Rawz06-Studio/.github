@@ -60,7 +60,7 @@ jobs:
       - name: Trigger Dokploy Deploy
         if: ${{ inputs.dokploy_app_id != '' }}
         run: |
-          curl -X GET https://dokploy.admin.rawz06.dev/api/deploy/${{ inputs.dokploy_app_id }} \
+          curl -X GET https://dokploy.admin.rawz06.fr/api/deploy/${{ inputs.dokploy_app_id }} \
               --connect-timeout 10 \
               --max-time 30 \
               --retry 3 \
