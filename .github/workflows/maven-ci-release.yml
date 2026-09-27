@@ -30,6 +30,9 @@ jobs:
           distribution: temurin
 
       - name: Configure Maven settings (GitHub Packages)
+        env:
+          MAVEN_USERNAME: ${{ github.actor }}
+          MAVEN_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml <<EOF
@@ -37,8 +40,8 @@ jobs:
             <servers>
               <server>
                 <id>github</id>
-                <username>\${{ github.actor }}</username>
-                <password>\${{ secrets.GITHUB_TOKEN }}</password>
+                <username>$MAVEN_USERNAME</username>
+                <password>$MAVEN_TOKEN</password>
               </server>
             </servers>
           </settings>
