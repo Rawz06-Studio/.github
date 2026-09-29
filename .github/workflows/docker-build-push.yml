@@ -56,6 +56,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           provenance: false
           sbom: false
+          secrets: |
+            github_token=${{ secrets.GITHUB_TOKEN }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Trigger Dokploy Deploy
         if: ${{ inputs.dokploy_app_id != '' }}
