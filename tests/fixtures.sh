@@ -67,7 +67,12 @@ test_rust() {
   if [ -n "${RUST_TARGET:-}" ]; then
     out="$(cd "$DIR" && cargo build --release --locked --quiet --target "$RUST_TARGET" 2>&1 \
       && file "target/$RUST_TARGET/release/fixture")"
-    check "rust : binaire statique ($RUST_TARGET)" "$out" "statically linked"
+    # `file` écrit « statically linked » ou « static-pie linked » selon la version et le
+    # type de binaire ; un binaire qui dépend de la libc donnerait « dynamically linked ».
+    local linkage="dynamique"
+    grep -qE "statically linked|static-pie linked" <<<"$out" && linkage="statique"
+    check "rust : binaire statique ($RUST_TARGET)" "$linkage" "statique"
+    [ "$linkage" = statique ] || echo "       $out"
   fi
 }
 
