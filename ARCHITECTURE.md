@@ -227,11 +227,11 @@ Publiées sur `ghcr.io/rawz06-studio/<image>`, en **packages publics** (pas d'au
 
 | Image | Base amont | Contenu |
 |---|---|---|
-| `java-runtime:25` | `eclipse-temurin:25-jre` | utilisateur non-root, `JAVA_OPTS`, `SPRING_PROFILES_ACTIVE=prod`, entrypoint `java $JAVA_OPTS -jar /app/app.jar` |
-| `node-runtime:24` | `node:24-trixie-slim` | utilisateur `node`, `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000` |
-| `php-runtime:8.4` | FrankenPHP (PHP 8.4, Debian) | extensions courantes (pdo_pgsql, opcache, intl…), non-root, Caddyfile par défaut sur `public/` |
-| `rust-runtime` | image minimale | certificats CA, tzdata, utilisateur non-root ; attend un binaire statique musl |
-| `static-web` | nginx unprivileged | gzip, cache des assets, fallback SPA optionnel, pages d'erreur |
+| `java-runtime:25` | `eclipse-temurin:25-jre-noble` | uid 10001, port 8080, `JAVA_OPTS` (`MaxRAMPercentage=75`), `SPRING_PROFILES_ACTIVE=prod`, lance `/app/app.jar` |
+| `node-runtime:24` | `node:24-trixie-slim` | uid 1000 (`node`), port 3000, `NODE_ENV=production`, `HOST=0.0.0.0`, tini en PID 1 |
+| `php-runtime:8.4` | `dunglas/frankenphp:1-php8.4-trixie` | uid 10001, HTTP sur 8080, racine `/app/public`, intl/opcache/pdo_pgsql/pgsql/zip, `php.ini` de prod |
+| `rust-runtime:latest` | `scratch` (+ fichiers de `debian:trixie-slim`) | uid 10001, certificats CA, fuseaux horaires, `/app` et `/tmp` en écriture, aucun shell |
+| `static-web:latest` | `nginxinc/nginx-unprivileged:stable-alpine` | uid 101, port 8080, gzip, assets `/assets/` immuables, HTML revalidé, `/healthz`, `NGINX_FALLBACK` pour les SPA |
 
 ### Règles
 
@@ -239,8 +239,13 @@ Publiées sur `ghcr.io/rawz06-studio/<image>`, en **packages publics** (pas d'au
   Les jobs Node qui embarquent des modules natifs tournent dans le conteneur `node:24-trixie` (`container:` du job), même Debian que l'image de runtime.
 - **Rust en musl statique** : le binaire ne dépend pas de la glibc du runner (qui passe à Ubuntu 26).
 - **Tags** : `java-runtime:25` (mobile, utilisé par les projets) et `java-runtime:25-YYYY.MM.DD` (figé, pour revenir en arrière).
+  Pour les images sans version de langage : `latest` et `YYYY.MM.DD`.
+- **Fuseau** `Europe/Paris` partout, **uid numérique** partout (`USER 10001:10001`…).
+- **Pas de cache de build** : chaque reconstruction repart des paquets à jour.
 - **Multi-arch** : `linux/amd64` + `linux/arm64`, chaque architecture construite sur un runner natif (`ubuntu-latest` / `ubuntu-24.04-arm`) puis fusionnées en un manifest. Pas de QEMU.
-- **Rebuild** : chaque semaine (cron) et à chaque mise à jour d'une image amont (Dependabot `docker` sur `images/`).
+- **Rebuild** : chaque lundi (cron) et à chaque merge touchant `images/`. Dependabot `docker` propose les montées de tag amont.
+- **Tests** : `tests/base-images.sh` vérifie chaque image (utilisateur, fuseau, service HTTP, arrêt propre…) sur les deux architectures avant publication.
+- **Liste des images** : `images/images.json` (nom, tag, description).
 
 ### Dockerfiles projet types
 
@@ -258,10 +263,15 @@ CMD ["node", ".output/server/index.mjs"]
 ```
 
 ```dockerfile
-# Site statique
-FROM ghcr.io/rawz06-studio/static-web
+# Site statique / SPA
+FROM ghcr.io/rawz06-studio/static-web:latest
 COPY dist/ /usr/share/nginx/html/
+# Seulement pour une SPA :
+ENV NGINX_FALLBACK=/index.html
 ```
+
+Attention à la migration : les apps changent d'utilisateur (uid 10001 ou 1000) et `static-web`
+écoute sur **8080** au lieu de 80. Vérifier les volumes montés et le port configuré dans Dokploy.
 
 Les besoins spécifiques restent dans le Dockerfile du projet, par-dessus la base :
 Python/uv + plando (RSLFrancoBot, RSLGeneratorAPI), ffmpeg (funradio), Deno (nightbot-admin).

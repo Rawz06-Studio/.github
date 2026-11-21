@@ -56,6 +56,21 @@ jobs:
           done
           pipx run zizmor --config .github/zizmor.yml --format=github "${files[@]}"
 
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint Dockerfiles
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo hadolint/hadolint:v2.12.0-debian \
+            hadolint --config .hadolint.yaml --format tty images/*/Dockerfile
+
   scripts:
     name: Scripts
     runs-on: ubuntu-latest

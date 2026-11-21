@@ -15,4 +15,14 @@ updates:
       - dependencies
       - github-actions
 
-  # Les images de base (images/*) seront ajoutées ici à l'étape 2.
+  # Images amont des images de base (FROM …). Les correctifs d'une même version
+  # arrivent déjà par la reconstruction hebdomadaire ; Dependabot propose les montées de tag.
+  - package-ecosystem: docker
+    directories:
+      - /images/*
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docker

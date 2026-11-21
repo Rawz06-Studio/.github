@@ -1,0 +1,27 @@
+[
+  {
+    "name": "java-runtime",
+    "tag": "25",
+    "description": "JRE Temurin 25, utilisateur non-root, lance /app/app.jar"
+  },
+  {
+    "name": "node-runtime",
+    "tag": "24",
+    "description": "Node 24 (Debian trixie), utilisateur non-root, tini en PID 1"
+  },
+  {
+    "name": "php-runtime",
+    "tag": "8.4",
+    "description": "FrankenPHP + PHP 8.4, utilisateur non-root, sert /app/public sur le port 8080"
+  },
+  {
+    "name": "rust-runtime",
+    "tag": "latest",
+    "description": "Image minimale pour un binaire Rust statique (musl) : certificats CA, fuseaux horaires, non-root"
+  },
+  {
+    "name": "static-web",
+    "tag": "latest",
+    "description": "nginx non-root pour sites statiques : gzip, cache, fallback SPA optionnel"
+  }
+]
