@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · php-app",
+  "description": "Application PHP (FrankenPHP) : tests, image Docker, release et déploiement Dokploy",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "composer\\.json$"
+  ]
+}

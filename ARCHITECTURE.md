@@ -110,6 +110,7 @@ sinon le pom publié contient littéralement `${revision}`.
 │   ├── compute-version/              dernier tag + commits → version
 │   ├── set-version/                  injecte la version dans le workspace
 │   ├── prepare-image-context/        contexte Docker en artefact
+│   ├── resolve-mode/                 événement → release | preview | ci
 │   └── dokploy-deploy/               déclenche un déploiement Dokploy
 │
 ├── images/                           IMAGES DE BASE
@@ -118,6 +119,8 @@ sinon le pom publié contient littéralement `${revision}`.
 │   ├── php-runtime/Dockerfile
 │   ├── rust-runtime/Dockerfile
 │   └── static-web/{Dockerfile,nginx.conf}
+│
+├── workflow-templates/               MODÈLES pour les projets (Actions → New workflow)
 │
 └── .github/
     ├── dependabot.yml                github-actions + docker (images/)
@@ -191,22 +194,39 @@ de l'appelant ; les autres déclarent leur minimum.
 ### Couche 3 — pipelines
 
 Un pipeline par profil. **Un projet n'a qu'un seul fichier** : le pipeline lit l'événement
-et choisit CI, Preview ou Release.
+et choisit CI, Preview ou Release (`resolve-mode`, dans le job `_version`).
 
 | Pipeline | Profil | Enchaînement |
 |---|---|---|
 | `java-app.yml` | app Spring Boot | version → `_java` → `_docker` → `_release` → `_deploy` |
-| `java-lib.yml` | lib Maven | version → `_java` (publish) → `_release` |
+| `java-lib.yml` | lib Maven | version → `_java` (publish hors ci) → `_release` |
 | `node-app.yml` | Nuxt, serveur Node, front statique buildé | version → `_node` → `_docker` → `_release` → `_deploy` |
 | `php-app.yml` | app PHP | version → `_php` → `_docker` → `_release` → `_deploy` |
 | `rust-app.yml` | serveur Rust (+ client WASM) | version → `_rust` → `_docker` → `_release` → `_deploy` |
-| `rust-desktop.yml` | appli desktop Rust | version → `_rust` (checks) → `_rust-binaries` → `_release` (avec assets) |
+| `rust-desktop.yml` | appli desktop Rust | version → `_rust` (checks) → `_rust-binaries` (hors ci) → `_release` (avec assets) |
 | `docker-app.yml` | le Dockerfile fait tout (HTML pur, cas particuliers) | version → `_docker` → `_release` → `_deploy` |
 
-Un pipeline peut cumuler : RawZLinsoTrackerRust appellera `rust-app.yml` **et** `rust-desktop.yml`
-(serveur en image + client desktop en binaires) avec la même version.
+| Mode | Déclencheur | Image | Release | Déploiement |
+|---|---|---|---|---|
+| `ci` | PR, push hors branche par défaut | construite et testée, non publiée | — | — |
+| `preview` | PR avec le label `preview`, ou bouton « preview » | `:<version>-rc.N`, `:preview`, `:pr-N` | — | app preprod (`DOKPLOY_PREVIEW_TOKEN`) |
+| `release` | push sur la branche par défaut, ou bouton « release » | `:<version>`, `:latest`, `:sha-…` | tag + GitHub Release | app prod (`DOKPLOY_TOKEN`) |
 
-#### Exemple côté projet
+Un pipeline peut cumuler : RawZLinsoTrackerRust appellera `rust-app.yml` **et** `rust-desktop.yml`
+(serveur en image + client desktop en binaires). Les deux calculent la même version ; le second
+pipeline, appelé avec `needs:` sur le premier, ajoute ses binaires à la release existante.
+
+**Permissions.** GitHub vérifie aussi les jobs qui seront sautés : un projet accorde donc au pipeline
+tout ce que ses jobs déclarent (`contents: write`, `packages: write`), même pour une simple PR.
+Chaque job, lui, ne reçoit que son minimum.
+
+**Concurrence.** Elle se règle dans le fichier du projet (modèles ci-dessous) : un seul run à la fois
+sur la branche par défaut, pour que deux pushes rapprochés donnent deux versions successives.
+
+#### Côté projet
+
+Les modèles de `workflow-templates/` apparaissent dans *Actions → New workflow* de chaque repo
+de l'organisation. Exemple pour une app Java :
 
 ```yaml
 # .github/workflows/pipeline.yml — le seul fichier du projet
@@ -221,17 +241,28 @@ on:
     inputs:
       mode:
         type: choice
+        default: release
         options: [release, preview]
       bump:
         type: choice
+        default: auto
         options: [auto, patch, minor, major]
+
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
 
 jobs:
   pipeline:
     uses: Rawz06-Studio/.github/.github/workflows/java-app.yml@v1
+    permissions:
+      contents: write
+      packages: write
     with:
-      java_version: '25'
-      image_name: seedgenerator
+      image-name: seedgenerator
+      dokploy-url: ${{ vars.DOKPLOY_URL }}
     secrets: inherit
 ```
 

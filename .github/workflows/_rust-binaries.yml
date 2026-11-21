@@ -37,6 +37,10 @@ on:
         description: Vérifier que `<binaire> --version` affiche la version
         type: boolean
         default: false
+      build-env:
+        description: Variables d'environnement de compilation, une par ligne (CLE=valeur)
+        type: string
+        default: ""
       targets:
         description: >-
           Plateformes, en JSON : liste de {name, runner, target}.
@@ -108,6 +112,21 @@ jobs:
           sudo apt-get update -qq
           # shellcheck disable=SC2086 # liste de paquets séparés par des espaces
           sudo apt-get install -y -qq --no-install-recommends $PACKAGES
+
+      - name: Export build environment
+        if: inputs.build-env != ''
+        env:
+          BUILD_ENV: ${{ inputs.build-env }}
+        run: |
+          while IFS= read -r line; do
+            [ -n "${line// /}" ] || continue
+            if ! [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+              echo "::error::ligne build-env invalide (attendu CLE=valeur) : ${line%%=*}"
+              exit 1
+            fi
+            echo "$line" >>"$GITHUB_ENV"
+            echo "${line%%=*} défini"
+          done <<<"$BUILD_ENV"
 
       - name: Set version
         uses: ./.rawz06-ci/actions/set-version

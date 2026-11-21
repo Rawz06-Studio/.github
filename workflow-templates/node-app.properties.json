@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · node-app",
+  "description": "Application Node (Nuxt, serveur, front) : tests, image Docker, release et déploiement Dokploy",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "package\\.json$"
+  ]
+}

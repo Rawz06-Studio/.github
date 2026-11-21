@@ -1,0 +1,48 @@
+name: Resolve mode
+description: >-
+  Déduit le mode du pipeline de l'événement : release (push sur la branche par
+  défaut), preview (PR avec le label `preview`), ci (le reste), ou le mode choisi
+  au déclenchement manuel.
+
+inputs:
+  mode:
+    description: "auto | release | preview | ci"
+    required: false
+    default: auto
+  bump:
+    description: "auto | patch | minor | major"
+    required: false
+    default: auto
+  preview-label:
+    description: Label de PR qui déclenche une preview
+    required: false
+    default: preview
+
+outputs:
+  mode:
+    description: "release | preview | ci"
+    value: ${{ steps.resolve.outputs.mode }}
+  bump:
+    description: "auto | patch | minor | major"
+    value: ${{ steps.resolve.outputs.bump }}
+  pr-number:
+    description: Numéro de la PR, vide hors PR
+    value: ${{ steps.resolve.outputs.pr-number }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve mode
+      id: resolve
+      shell: bash
+      env:
+        REQUESTED_MODE: ${{ inputs.mode }}
+        REQUESTED_BUMP: ${{ inputs.bump }}
+        EVENT_NAME: ${{ github.event_name }}
+        REF: ${{ github.ref }}
+        DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        DISPATCH_MODE: ${{ github.event.inputs.mode }}
+        DISPATCH_BUMP: ${{ github.event.inputs.bump }}
+        PREVIEW_LABEL: ${{ contains(github.event.pull_request.labels.*.name, inputs.preview-label) }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: "${GITHUB_ACTION_PATH}/resolve-mode.sh"

@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · java-lib",
+  "description": "Bibliothèque Maven : tests, publication sur GitHub Packages et release",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "pom\\.xml$"
+  ]
+}

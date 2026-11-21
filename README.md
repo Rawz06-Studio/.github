@@ -14,6 +14,31 @@ Workflows CI/CD partagés, actions composites et images de base des projets Rawz
 | [`.github/workflows/`](.github/workflows) | Jobs réutilisables (`_*.yml`) et pipelines par profil |
 | [`tests/`](tests) | Tests des scripts et des images |
 
+## Utiliser dans un projet
+
+Un seul fichier, `.github/workflows/pipeline.yml`, créé depuis *Actions → New workflow*
+(modèles « Rawz06 · … » de [`workflow-templates/`](workflow-templates)) :
+
+| Pipeline | Pour | Modèle |
+|---|---|---|
+| [`java-app`](.github/workflows/java-app.yml) | application Java en image Docker | [java-app.yml](workflow-templates/java-app.yml) |
+| [`java-lib`](.github/workflows/java-lib.yml) | bibliothèque Maven sur GitHub Packages | [java-lib.yml](workflow-templates/java-lib.yml) |
+| [`node-app`](.github/workflows/node-app.yml) | Nuxt, serveur Node, front buildé | [node-app.yml](workflow-templates/node-app.yml) |
+| [`php-app`](.github/workflows/php-app.yml) | application PHP (FrankenPHP) | [php-app.yml](workflow-templates/php-app.yml) |
+| [`rust-app`](.github/workflows/rust-app.yml) | serveur Rust (musl) + client WASM | [rust-app.yml](workflow-templates/rust-app.yml) |
+| [`rust-desktop`](.github/workflows/rust-desktop.yml) | application desktop, binaires multi-plateformes | [rust-desktop.yml](workflow-templates/rust-desktop.yml) |
+| [`docker-app`](.github/workflows/docker-app.yml) | le Dockerfile fait tout | [docker-app.yml](workflow-templates/docker-app.yml) |
+
+| Événement | Mode | Résultat |
+|---|---|---|
+| PR, push sur une branche | `ci` | tests, image construite et testée, rien de publié |
+| PR avec le label `preview` | `preview` | image `:preview` publiée, déploiement preprod |
+| push sur la branche par défaut | `release` | image `:<version>`, tag + GitHub Release, déploiement prod |
+| *Run workflow* | au choix | release ou preview, bump `patch` / `minor` / `major` forcé |
+
+Secrets du projet : `DOKPLOY_TOKEN` (webhook de l'app de prod), `DOKPLOY_PREVIEW_TOKEN` (facultatif).
+Variable : `DOKPLOY_URL` (repo ou organisation).
+
 ### Actions disponibles
 
 | Action | Rôle |
@@ -25,6 +50,7 @@ Workflows CI/CD partagés, actions composites et images de base des projets Rawz
 | [`setup-php`](actions/setup-php/action.yml) | PHP 8.4 avec les extensions de `php-runtime`, Composer, cache, `composer install` |
 | [`setup-rust`](actions/setup-rust/action.yml) | Toolchain (`rust-toolchain.toml` ou stable), targets, composants, musl-tools, cache |
 | [`dokploy-deploy`](actions/dokploy-deploy/action.yml) | Déclenche un déploiement Dokploy (webhook ou API), jetons masqués, 3 relances |
+| [`resolve-mode`](actions/resolve-mode/action.yml) | Déduit le mode du run de l'événement (`release`, `preview`, `ci`) et le bump demandé |
 | [`prepare-image-context`](actions/prepare-image-context/action.yml) | Archive le Dockerfile et les fichiers du build (permissions et fichiers cachés conservés) en artefact pour `_docker` |
 
 Les étapes Maven qui lisent GitHub Packages définissent `MAVEN_USERNAME: ${{ github.actor }}` et
@@ -36,7 +62,7 @@ Briques des pipelines ; un projet ne les appelle directement que pour un besoin 
 
 | Job | Rôle | Permissions à accorder |
 |---|---|---|
-| [`_version`](.github/workflows/_version.yml) | Version du run (`release`, `preview`, `ci`) | `contents: read` |
+| [`_version`](.github/workflows/_version.yml) | Mode du run (`auto` = déduit de l'événement) et version | `contents: read` |
 | [`_java`](.github/workflows/_java.yml) | `mvn verify`, publication GitHub Packages (`publish`), contexte d'image (`app.jar`) | `contents: read`, `packages: read` (`write` si `publish`) |
 | [`_node`](.github/workflows/_node.yml) | Scripts `lint typecheck test build`, dépendances de prod (modules natifs dans `node:<v>-trixie`), contexte d'image | `contents: read`, `packages: read` |
 | [`_php`](.github/workflows/_php.yml) | Composer, tests, `vendor/` de prod + `VERSION`, contexte d'image | `contents: read` |
@@ -91,6 +117,14 @@ tests/set-version.sh
 tests/dokploy-deploy.sh
 ```
 
+```bash
+tests/resolve-mode.sh
+```
+
+```bash
+tests/prepare-image-context.sh
+```
+
 Mini-projets de `tests/fixtures/` (Maven, pnpm, Composer et Cargo installés en local) :
 
 ```bash
@@ -108,5 +142,5 @@ tests/base-images.sh
 ```
 
 En CI, `self-test.yml` lance aussi actionlint, zizmor, hadolint, shellcheck, chaque action `setup-*` sur sa fixture,
-et les jobs réutilisables de bout en bout (build, contexte, image testée) sans rien publier ;
+et chaque pipeline de bout en bout en mode `ci` (build, image lancée et vérifiée) sans rien publier ;
 `base-images.yml` reconstruit et teste chaque image sur les deux architectures.

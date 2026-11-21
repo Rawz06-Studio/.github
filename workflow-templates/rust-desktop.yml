@@ -1,0 +1,47 @@
+# Pipeline application desktop Rust (binaires) — Rawz06-Studio
+#
+#   PR / branche          → fmt, clippy, test
+#   PR avec label preview → binaires en artefacts du run
+#   push sur $default-branch → binaires Linux, macOS, Windows attachés à la release
+#   Actions > Pipeline > Run workflow : release ou preview à la demande, bump forcé
+#
+# Empaquetage spécifique (.app, AppImage, installeur) : scripts/package-linux.sh,
+# scripts/package-macos.sh, scripts/package-windows.ps1 (voir _rust-binaries.yml).
+#
+name: Pipeline
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Ce que fait le run
+        type: choice
+        default: release
+        options: [release, preview]
+      bump:
+        description: Niveau de version de la release
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
+
+# Une seule release à la fois sur $default-branch ; une PR annule son run précédent.
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  pipeline:
+    uses: Rawz06-Studio/.github/.github/workflows/rust-desktop.yml@v1
+    permissions:
+      contents: write
+    with:
+      binary: mon-app
+      release-name: MonApp
+      # linux-packages: libxkbcommon-dev libwayland-dev
+    secrets: inherit

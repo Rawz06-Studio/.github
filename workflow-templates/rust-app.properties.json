@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · rust-app",
+  "description": "Serveur Rust : tests, binaire musl, image Docker, release et déploiement Dokploy",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "Cargo\\.toml$"
+  ]
+}

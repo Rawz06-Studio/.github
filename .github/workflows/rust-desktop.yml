@@ -1,0 +1,135 @@
+name: rust-desktop
+
+# Pipeline d'une application desktop Rust distribuée en binaires.
+#
+#   PR / branche      version ci      → fmt/clippy/test
+#   PR label preview  version rc      → fmt/clippy/test → binaires (artefacts du run, sans release)
+#   push main         version release → fmt/clippy/test → binaires → tag + Release avec les binaires
+#
+# Modèle d'appel : workflow-templates/rust-desktop.yml. Permissions à accorder :
+# contents: write.
+
+on:
+  workflow_call:
+    inputs:
+      binary:
+        description: Nom du binaire produit par Cargo
+        type: string
+        required: true
+      package:
+        description: Package Cargo à compiler (-p), vide = package racine
+        type: string
+        default: ""
+      release-name:
+        description: Nom affiché dans le titre de la release (ex. Unbing → « Unbing v1.4.3 »)
+        type: string
+        default: ""
+      working-directory:
+        type: string
+        default: .
+      toolchain:
+        description: Vide = rust-toolchain.toml du projet, sinon stable
+        type: string
+        default: ""
+      linux-packages:
+        description: Paquets apt nécessaires sous Linux (bibliothèques graphiques…)
+        type: string
+        default: ""
+      clippy-args:
+        type: string
+        default: --workspace --all-targets -- -D warnings
+      test-args:
+        type: string
+        default: --workspace --locked
+      version-check:
+        description: Vérifier que `<binaire> --version` affiche la version
+        type: boolean
+        default: false
+      build-env:
+        description: Variables d'environnement de compilation des binaires, une par ligne (CLE=valeur)
+        type: string
+        default: ""
+      targets:
+        description: Plateformes, en JSON (voir _rust-binaries.yml)
+        type: string
+        default: >-
+          [
+            {"name": "linux-x86_64", "runner": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu"},
+            {"name": "linux-aarch64", "runner": "ubuntu-22.04-arm", "target": "aarch64-unknown-linux-gnu"},
+            {"name": "macos-universal", "runner": "macos-latest", "target": "universal-apple-darwin"},
+            {"name": "windows-x86_64", "runner": "windows-latest", "target": "x86_64-pc-windows-msvc"}
+          ]
+      mode:
+        description: "auto (déduit de l'événement) | release | preview | ci"
+        type: string
+        default: auto
+      initial-version:
+        description: Version de la toute première release (vide = lue dans Cargo.toml)
+        type: string
+        default: ""
+      tooling-ref:
+        description: Ref de Rawz06-Studio/.github pour les actions
+        type: string
+        default: v1
+    outputs:
+      mode:
+        value: ${{ jobs.version.outputs.mode }}
+      version:
+        value: ${{ jobs.version.outputs.version }}
+
+permissions: {}
+
+jobs:
+  version:
+    uses: ./.github/workflows/_version.yml
+    permissions:
+      contents: read
+    with:
+      mode: ${{ inputs.mode }}
+      initial-version: ${{ inputs.initial-version }}
+      working-directory: ${{ inputs.working-directory }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/_rust.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.version.outputs.version }}
+      working-directory: ${{ inputs.working-directory }}
+      toolchain: ${{ inputs.toolchain }}
+      linux-packages: ${{ inputs.linux-packages }}
+      clippy-args: ${{ inputs.clippy-args }}
+      test-args: ${{ inputs.test-args }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  binaries:
+    needs: [version, checks]
+    if: needs.version.outputs.mode != 'ci'
+    uses: ./.github/workflows/_rust-binaries.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.version.outputs.version }}
+      binary: ${{ inputs.binary }}
+      package: ${{ inputs.package }}
+      working-directory: ${{ inputs.working-directory }}
+      toolchain: ${{ inputs.toolchain }}
+      linux-packages: ${{ inputs.linux-packages }}
+      version-check: ${{ inputs.version-check }}
+      build-env: ${{ inputs.build-env }}
+      targets: ${{ inputs.targets }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  release:
+    needs: [version, binaries]
+    if: needs.version.outputs.mode == 'release'
+    uses: ./.github/workflows/_release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      previous-tag: ${{ needs.version.outputs.previous-tag }}
+      title: ${{ inputs.release-name != '' && format('{0} {1}', inputs.release-name, needs.version.outputs.tag) || '' }}
+      assets-pattern: binaries-*

@@ -1,0 +1,52 @@
+# Pipeline application Java (image Docker) — Rawz06-Studio
+#
+#   PR / branche          → mvn verify + image construite
+#   PR avec label preview → image :preview publiée + déploiement preprod
+#   push sur $default-branch → image :<version> + release + déploiement prod
+#   Actions > Pipeline > Run workflow : release ou preview à la demande, bump forcé
+#
+# Le pom déclare <version>${revision}</version> ; le Dockerfile part de
+# ghcr.io/rawz06-studio/java-runtime:25 et copie app.jar.
+# Secrets du repo : DOKPLOY_TOKEN (webhook de l'app de prod), DOKPLOY_PREVIEW_TOKEN
+# (webhook de l'app de preprod, facultatif). Variable : DOKPLOY_URL (repo ou organisation).
+#
+name: Pipeline
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Ce que fait le run
+        type: choice
+        default: release
+        options: [release, preview]
+      bump:
+        description: Niveau de version de la release
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
+
+# Une seule release à la fois sur $default-branch ; une PR annule son run précédent.
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  pipeline:
+    uses: Rawz06-Studio/.github/.github/workflows/java-app.yml@v1
+    permissions:
+      contents: write
+      packages: write
+    with:
+      image-name: mon-app
+      java-version: "25"
+      dokploy-url: ${{ vars.DOKPLOY_URL }}
+      # image-files: |      # fichiers en plus du jar (ex. données)
+      #   data
+    secrets: inherit

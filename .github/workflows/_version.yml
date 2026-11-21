@@ -1,16 +1,17 @@
 name: _version
 
-# Job réutilisable : calcule la version du run (voir actions/compute-version).
+# Job réutilisable : déduit le mode du run de l'événement (actions/resolve-mode) puis
+# calcule la version correspondante (actions/compute-version).
 
 on:
   workflow_call:
     inputs:
       mode:
-        description: "release | preview | ci"
+        description: "auto (déduit de l'événement) | release | preview | ci"
         type: string
-        required: true
+        default: auto
       bump:
-        description: "auto | patch | minor | major"
+        description: "auto | patch | minor | major (auto = input bump du déclenchement manuel, sinon les commits)"
         type: string
         default: auto
       initial-version:
@@ -26,6 +27,12 @@ on:
         type: string
         default: v1
     outputs:
+      mode:
+        description: "Mode du run : release | preview | ci"
+        value: ${{ jobs.version.outputs.mode }}
+      pr-number:
+        description: Numéro de la PR, vide hors PR
+        value: ${{ jobs.version.outputs.pr-number }}
       version:
         description: Version du run (1.4.3, 1.4.3-rc.12, 1.4.3-ci.abc1234)
         value: ${{ jobs.version.outputs.version }}
@@ -51,6 +58,8 @@ jobs:
     permissions:
       contents: read
     outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      pr-number: ${{ steps.mode.outputs.pr-number }}
       version: ${{ steps.compute.outputs.version }}
       release-version: ${{ steps.compute.outputs.release-version }}
       tag: ${{ steps.compute.outputs.tag }}
@@ -71,11 +80,18 @@ jobs:
           sparse-checkout: actions
           persist-credentials: false
 
+      - name: Resolve mode
+        id: mode
+        uses: ./.rawz06-ci/actions/resolve-mode
+        with:
+          mode: ${{ inputs.mode }}
+          bump: ${{ inputs.bump }}
+
       - name: Compute version
         id: compute
         uses: ./.rawz06-ci/actions/compute-version
         with:
-          mode: ${{ inputs.mode }}
-          bump: ${{ inputs.bump }}
+          mode: ${{ steps.mode.outputs.mode }}
+          bump: ${{ steps.mode.outputs.bump }}
           initial-version: ${{ inputs.initial-version }}
           working-directory: ${{ inputs.working-directory }}

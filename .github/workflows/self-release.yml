@@ -26,8 +26,11 @@ concurrency:
 jobs:
   test:
     uses: ./.github/workflows/self-test.yml
+    # self-test appelle les pipelines, dont les jobs de publication déclarent ces
+    # permissions ; ils tournent en mode ci et ne publient rien.
     permissions:
-      contents: read
+      contents: write
+      packages: write
 
   release:
     name: Release
