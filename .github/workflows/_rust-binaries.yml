@@ -1,0 +1,206 @@
+name: _rust-binaries
+
+# Job réutilisable : compile un binaire Rust pour chaque plateforme de la matrice et
+# l'empaquette. Artefacts `binaries-<nom>`, attachés à la release par _release.yml.
+#
+# Empaquetage spécifique : si le projet fournit scripts/package-linux.sh,
+# scripts/package-macos.sh ou scripts/package-windows.ps1, il est appelé avec les
+# variables VERSION, TARGET, NAME, BINARY (binaire compilé) et OUT_DIR (dossier des
+# fichiers à publier). Sinon : archive .tar.gz (.zip sous Windows) du binaire.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version à injecter
+        type: string
+        required: true
+      binary:
+        description: Nom du binaire produit par Cargo
+        type: string
+        required: true
+      package:
+        description: Package Cargo à compiler (-p), vide = package racine
+        type: string
+        default: ""
+      working-directory:
+        type: string
+        default: .
+      toolchain:
+        type: string
+        default: ""
+      linux-packages:
+        description: Paquets apt nécessaires sous Linux (bibliothèques graphiques…)
+        type: string
+        default: ""
+      version-check:
+        description: Vérifier que `<binaire> --version` affiche la version
+        type: boolean
+        default: false
+      targets:
+        description: >-
+          Plateformes, en JSON : liste de {name, runner, target}.
+          La target spéciale universal-apple-darwin produit un binaire macOS universel.
+        type: string
+        default: >-
+          [
+            {"name": "linux-x86_64", "runner": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu"},
+            {"name": "linux-aarch64", "runner": "ubuntu-22.04-arm", "target": "aarch64-unknown-linux-gnu"},
+            {"name": "macos-universal", "runner": "macos-latest", "target": "universal-apple-darwin"},
+            {"name": "windows-x86_64", "runner": "windows-latest", "target": "x86_64-pc-windows-msvc"}
+          ]
+      tooling-ref:
+        type: string
+        default: v1
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      VERSION: ${{ inputs.version }}
+      TARGET: ${{ matrix.target }}
+      NAME: ${{ matrix.name }}
+      BIN_NAME: ${{ inputs.binary }}
+      PACKAGE: ${{ inputs.package }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: ./.rawz06-ci/actions/setup-rust
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin, x86_64-apple-darwin' || matrix.target }}
+          working-directory: ${{ inputs.working-directory }}
+          cache-key: ${{ matrix.name }}
+
+      - name: Install system packages
+        if: runner.os == 'Linux' && inputs.linux-packages != ''
+        env:
+          PACKAGES: ${{ inputs.linux-packages }}
+        run: |
+          sudo apt-get update -qq
+          # shellcheck disable=SC2086 # liste de paquets séparés par des espaces
+          sudo apt-get install -y -qq --no-install-recommends $PACKAGES
+
+      - name: Set version
+        uses: ./.rawz06-ci/actions/set-version
+        with:
+          version: ${{ inputs.version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Build
+        id: build
+        run: |
+          args=(build --release --locked)
+          [ -n "$PACKAGE" ] && args+=(-p "$PACKAGE")
+          ext=""; [ "$RUNNER_OS" = Windows ] && ext=".exe"
+
+          if [ "$TARGET" = universal-apple-darwin ]; then
+            cargo "${args[@]}" --target aarch64-apple-darwin
+            cargo "${args[@]}" --target x86_64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            binary="target/universal-apple-darwin/release/$BIN_NAME"
+            lipo -create -output "$binary" \
+              "target/aarch64-apple-darwin/release/$BIN_NAME" \
+              "target/x86_64-apple-darwin/release/$BIN_NAME"
+          else
+            cargo "${args[@]}" --target "$TARGET"
+            binary="target/$TARGET/release/$BIN_NAME$ext"
+          fi
+          [ -f "$binary" ] || { echo "::error::binaire introuvable : $binary"; exit 1; }
+          echo "binary=$PWD/$binary" >>"$GITHUB_OUTPUT"
+
+      - name: Check version
+        if: inputs.version-check
+        env:
+          BINARY: ${{ steps.build.outputs.binary }}
+        run: |
+          reported="$("$BINARY" --version)"
+          echo "$reported"
+          grep -qF "$VERSION" <<<"$reported" || { echo "::error::--version n'affiche pas $VERSION"; exit 1; }
+
+      - name: Package (project script)
+        id: script
+        env:
+          BINARY: ${{ steps.build.outputs.binary }}
+        run: |
+          OUT_DIR="$RUNNER_TEMP/dist"
+          mkdir -p "$OUT_DIR"
+          echo "out-dir=$OUT_DIR" >>"$GITHUB_OUTPUT"
+          case "$RUNNER_OS" in
+            Linux) script=scripts/package-linux.sh ;;
+            macOS) script=scripts/package-macos.sh ;;
+            Windows) script=scripts/package-windows.ps1 ;;
+          esac
+          if [ ! -f "$script" ]; then
+            echo "found=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "found=true" >>"$GITHUB_OUTPUT"
+          export BINARY OUT_DIR
+          if [ "$RUNNER_OS" = Windows ]; then
+            pwsh -NoProfile -File "$script"
+          else
+            bash "$script"
+          fi
+
+      - name: Package (archive)
+        if: steps.script.outputs.found == 'false'
+        env:
+          BINARY: ${{ steps.build.outputs.binary }}
+          OUT_DIR: ${{ steps.script.outputs.out-dir }}
+        run: |
+          base="$BIN_NAME-$VERSION-$NAME"
+          staging="$RUNNER_TEMP/$base"
+          mkdir -p "$staging"
+          cp "$BINARY" "$staging/"
+          for doc in README.md LICENSE LICENSE.md; do
+            [ -f "$doc" ] && cp "$doc" "$staging/"
+          done
+          if [ "$RUNNER_OS" = Windows ]; then
+            (cd "$RUNNER_TEMP" && 7z a -tzip "$OUT_DIR/$base.zip" "$base" >/dev/null)
+          else
+            tar -czf "$OUT_DIR/$base.tar.gz" -C "$RUNNER_TEMP" "$base"
+          fi
+
+      - name: List packages
+        env:
+          OUT_DIR: ${{ steps.script.outputs.out-dir }}
+        run: |
+          ls -la "$OUT_DIR"
+          [ -n "$(ls -A "$OUT_DIR")" ] || { echo "::error::aucun fichier dans $OUT_DIR"; exit 1; }
+
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: binaries-${{ matrix.name }}
+          path: ${{ steps.script.outputs.out-dir }}/*
+          if-no-files-found: error
+          retention-days: 7

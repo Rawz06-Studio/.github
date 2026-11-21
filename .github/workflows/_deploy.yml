@@ -1,0 +1,76 @@
+name: _deploy
+
+# Job réutilisable : déploiement Dokploy dans un environnement GitHub (historique des
+# déploiements visible dans le repo). Sans jeton fourni, le job réussit sans rien
+# déployer : un projet sans preprod n'a simplement pas de secret de preview.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environnement GitHub (production, preview)
+        type: string
+        required: true
+      url:
+        description: URL de l'instance Dokploy (variable DOKPLOY_URL)
+        type: string
+        default: ""
+      application-id:
+        description: Identifiant de l'application, avec le secret api-key
+        type: string
+        default: ""
+      tooling-ref:
+        type: string
+        default: v1
+    secrets:
+      webhook-token:
+        description: Jeton du webhook de déploiement de l'application
+        required: false
+      api-key:
+        description: Clé d'API Dokploy, à la place du webhook
+        required: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          URL: ${{ inputs.url }}
+          HAS_WEBHOOK: ${{ secrets.webhook-token != '' }}
+          HAS_API_KEY: ${{ secrets.api-key != '' }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [ "$HAS_WEBHOOK" != true ] && [ "$HAS_API_KEY" != true ]; then
+            echo "::notice::Pas de jeton Dokploy pour $ENVIRONMENT : rien à déployer"
+            echo "deploy=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ -n "$URL" ] || { echo "::error::URL Dokploy manquante (variable DOKPLOY_URL)"; exit 1; }
+          echo "deploy=true" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout CI tooling
+        if: steps.config.outputs.deploy == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Deploy
+        if: steps.config.outputs.deploy == 'true'
+        uses: ./.rawz06-ci/actions/dokploy-deploy
+        with:
+          url: ${{ inputs.url }}
+          webhook-token: ${{ secrets.webhook-token }}
+          api-key: ${{ secrets.api-key }}
+          application-id: ${{ inputs.application-id }}

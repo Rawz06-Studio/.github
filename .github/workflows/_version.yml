@@ -1,0 +1,81 @@
+name: _version
+
+# Job réutilisable : calcule la version du run (voir actions/compute-version).
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "release | preview | ci"
+        type: string
+        required: true
+      bump:
+        description: "auto | patch | minor | major"
+        type: string
+        default: auto
+      initial-version:
+        description: Version de la toute première release (vide = lue dans le projet)
+        type: string
+        default: ""
+      working-directory:
+        description: Dossier du fichier projet, pour la version initiale
+        type: string
+        default: .
+      tooling-ref:
+        description: Ref de Rawz06-Studio/.github pour les actions (géré par les pipelines)
+        type: string
+        default: v1
+    outputs:
+      version:
+        description: Version du run (1.4.3, 1.4.3-rc.12, 1.4.3-ci.abc1234)
+        value: ${{ jobs.version.outputs.version }}
+      release-version:
+        description: Version de release sans suffixe
+        value: ${{ jobs.version.outputs.release-version }}
+      tag:
+        description: Tag de release (v1.4.3)
+        value: ${{ jobs.version.outputs.tag }}
+      previous-tag:
+        description: Tag de la release précédente
+        value: ${{ jobs.version.outputs.previous-tag }}
+      exists:
+        description: true si ce commit est déjà releasé (relance)
+        value: ${{ jobs.version.outputs.exists }}
+
+permissions: {}
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      release-version: ${{ steps.compute.outputs.release-version }}
+      tag: ${{ steps.compute.outputs.tag }}
+      previous-tag: ${{ steps.compute.outputs.previous-tag }}
+      exists: ${{ steps.compute.outputs.exists }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Compute version
+        id: compute
+        uses: ./.rawz06-ci/actions/compute-version
+        with:
+          mode: ${{ inputs.mode }}
+          bump: ${{ inputs.bump }}
+          initial-version: ${{ inputs.initial-version }}
+          working-directory: ${{ inputs.working-directory }}

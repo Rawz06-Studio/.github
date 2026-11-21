@@ -109,6 +109,7 @@ sinon le pom publié contient littéralement `${revision}`.
 │   ├── setup-rust/                   toolchain + targets + cache
 │   ├── compute-version/              dernier tag + commits → version
 │   ├── set-version/                  injecte la version dans le workspace
+│   ├── prepare-image-context/        contexte Docker en artefact
 │   └── dokploy-deploy/               déclenche un déploiement Dokploy
 │
 ├── images/                           IMAGES DE BASE
@@ -121,7 +122,8 @@ sinon le pom publié contient littéralement `${revision}`.
 └── .github/
     ├── dependabot.yml                github-actions + docker (images/)
     └── workflows/
-        ├── _java.yml                 COUCHE 2 — jobs réutilisables
+        ├── _version.yml              COUCHE 2 — jobs réutilisables
+        ├── _java.yml
         ├── _node.yml
         ├── _php.yml
         ├── _rust.yml
@@ -163,14 +165,28 @@ Un fichier = un job = une responsabilité. Tous acceptent `working-directory`.
 
 | Job | Fait | Sorties |
 |---|---|---|
-| `_java.yml` | `mvn verify` (avec version injectée) ; option `publish` → `mvn deploy` sur GitHub Packages ; upload du jar en artefact | nom de l'artefact |
-| `_node.yml` | install, lint, typecheck, test, build (scripts `--if-present`) ; prépare le dossier à embarquer (`.output/` ou `dist/` + deps de prod) | nom de l'artefact |
-| `_php.yml` | `composer install --no-dev`, tests | nom de l'artefact |
-| `_rust.yml` | fmt, clippy, test ; build serveur statique `x86_64-unknown-linux-musl` (+ client WASM via trunk si demandé) | nom de l'artefact |
-| `_rust-binaries.yml` | matrice OS/targets, build + packaging + checksums | artefacts par plateforme |
-| `_docker.yml` | télécharge l'artefact, `docker build` sur le Dockerfile du projet, push optionnel, tags calculés | digest |
-| `_release.yml` | crée le tag + la GitHub Release (notes générées), attache les assets éventuels | — |
-| `_deploy.yml` | environnement GitHub (`production` / `preview`) + `dokploy-deploy` | — |
+| `_version.yml` | `compute-version` dans le mode demandé | `version`, `tag`, `previous-tag`, `exists` |
+| `_java.yml` | `mvn verify` (version injectée) ; option `publish` → `mvn deploy` sur GitHub Packages ; option `image` → jar renommé `app.jar` + `image-files` | artefact de contexte |
+| `_node.yml` | scripts `lint typecheck test build` (`--if-present`) ; option `prod-dependencies` (dans `node:<v>-trixie` si `native-modules`) ; `image-files` (`.output` par défaut) | artefact de contexte |
+| `_php.yml` | Composer, tests ; pour l'image : `vendor/` sans dev, `VERSION`, projet entier par défaut | artefact de contexte |
+| `_rust.yml` | fmt, clippy, test ; pour l'image : binaires musl (`binaries`) dans `bin/`, client WASM (`trunk-dir`) | artefact de contexte |
+| `_rust-binaries.yml` | matrice OS/targets (JSON), macOS universel, scripts `scripts/package-*` ou archive par défaut | artefacts `binaries-<plateforme>` |
+| `_docker.yml` | extrait le contexte (ou construit depuis le repo), `APP_VERSION` en build-arg, test optionnel (`test-expect`), push et tags selon le mode | image, digest |
+| `_release.yml` | tag + GitHub Release (notes générées), assets + `SHA256SUMS`, relance sans doublon | — |
+| `_deploy.yml` | environnement GitHub + `dokploy-deploy` ; sans jeton, réussit sans déployer | — |
+
+**Contexte d'image.** Le job de build ne transmet à `_docker` que le Dockerfile et les fichiers listés,
+archivés en `.tar` (`prepare-image-context`) : permissions (binaires exécutables) et dossiers cachés
+(`.output`) sont conservés, et rien d'autre du repo n'entre dans l'image. Les chemins du Dockerfile
+sont relatifs au projet (`COPY app.jar …`, `COPY .output …`, `COPY bin/server …`).
+
+**Actions partagées.** Chaque job récupère les actions de ce repo dans `.rawz06-ci/` à la ref
+`tooling-ref` (`v1` par défaut, transmise par les pipelines). `self-test.yml` passe le commit testé :
+les jobs sont validés avec les actions de la même version, ce qu'une référence `@v1` en dur empêcherait.
+
+**Permissions.** GitHub vérifie les permissions d'un job réutilisable sans tenir compte de ses `if:`.
+`_java` (publication optionnelle) et `_docker` (push optionnel) ne déclarent donc rien et héritent
+de l'appelant ; les autres déclarent leur minimum.
 
 ### Couche 3 — pipelines
 
@@ -348,8 +364,8 @@ Plus tard : actions composites `package-macos-app` et `package-windows-installer
 - **Versions** : tags `v1.2.3` + tag mobile `v1`. Changement cassant → `v2`.
 - **Qualité** : `actionlint` + `zizmor` (sécurité des workflows) sur chaque PR.
 - **Fixtures** : `tests/fixtures/<profil>/` — un mini-projet par profil, exécuté par `self-test.yml` via les pipelines locaux.
-- **Références internes** : les pipelines référencent les actions en chemin complet (`Rawz06-Studio/.github/actions/x@v1`).
-  Un `./actions/x` serait résolu dans le repo appelant.
+- **Références internes** : un `./actions/x` dans un workflow réutilisable serait résolu dans le repo appelant.
+  Les jobs récupèrent donc les actions via `tooling-ref` (voir couche 2). Au passage à `v2`, mettre à jour ce défaut.
 - **Dependabot** : un modèle par profil dans le README, à copier dans chaque projet (ce n'est pas centralisable).
 
 ---

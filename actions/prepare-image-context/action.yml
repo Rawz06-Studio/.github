@@ -1,0 +1,42 @@
+name: Prepare image context
+description: >-
+  Rassemble le Dockerfile et les fichiers produits par le build dans un contexte
+  Docker, archivé en .tar (permissions et fichiers cachés conservés) puis publié en
+  artefact pour le job _docker.
+
+inputs:
+  working-directory:
+    description: Dossier du projet ; les chemins de `files` et `dockerfile` y sont relatifs
+    required: false
+    default: .
+  dockerfile:
+    description: Dockerfile du projet, copié à la racine du contexte
+    required: false
+    default: Dockerfile
+  files:
+    description: Fichiers et dossiers à embarquer, un par ligne (structure conservée)
+    required: true
+  artifact-name:
+    description: Nom de l'artefact
+    required: false
+    default: image-context
+
+runs:
+  using: composite
+  steps:
+    - name: Build context archive
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        FILES: ${{ inputs.files }}
+      run: "${GITHUB_ACTION_PATH}/prepare.sh"
+
+    - name: Upload context
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/image-context.tar
+        if-no-files-found: error
+        retention-days: 1
+        compression-level: 1

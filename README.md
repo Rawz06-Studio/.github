@@ -25,9 +25,30 @@ Workflows CI/CD partagés, actions composites et images de base des projets Rawz
 | [`setup-php`](actions/setup-php/action.yml) | PHP 8.4 avec les extensions de `php-runtime`, Composer, cache, `composer install` |
 | [`setup-rust`](actions/setup-rust/action.yml) | Toolchain (`rust-toolchain.toml` ou stable), targets, composants, musl-tools, cache |
 | [`dokploy-deploy`](actions/dokploy-deploy/action.yml) | Déclenche un déploiement Dokploy (webhook ou API), jetons masqués, 3 relances |
+| [`prepare-image-context`](actions/prepare-image-context/action.yml) | Archive le Dockerfile et les fichiers du build (permissions et fichiers cachés conservés) en artefact pour `_docker` |
 
 Les étapes Maven qui lisent GitHub Packages définissent `MAVEN_USERNAME: ${{ github.actor }}` et
 `MAVEN_PASSWORD: ${{ github.token }}` dans leur `env:` : le jeton n'est jamais écrit sur le disque.
+
+### Jobs réutilisables
+
+Briques des pipelines ; un projet ne les appelle directement que pour un besoin particulier.
+
+| Job | Rôle | Permissions à accorder |
+|---|---|---|
+| [`_version`](.github/workflows/_version.yml) | Version du run (`release`, `preview`, `ci`) | `contents: read` |
+| [`_java`](.github/workflows/_java.yml) | `mvn verify`, publication GitHub Packages (`publish`), contexte d'image (`app.jar`) | `contents: read`, `packages: read` (`write` si `publish`) |
+| [`_node`](.github/workflows/_node.yml) | Scripts `lint typecheck test build`, dépendances de prod (modules natifs dans `node:<v>-trixie`), contexte d'image | `contents: read`, `packages: read` |
+| [`_php`](.github/workflows/_php.yml) | Composer, tests, `vendor/` de prod + `VERSION`, contexte d'image | `contents: read` |
+| [`_rust`](.github/workflows/_rust.yml) | fmt, clippy, tests ; binaires musl dans `bin/` et client WASM (trunk) pour l'image | `contents: read` |
+| [`_rust-binaries`](.github/workflows/_rust-binaries.yml) | Binaires par plateforme (matrice JSON, macOS universel), scripts `scripts/package-*` du projet ou archive | `contents: read` |
+| [`_docker`](.github/workflows/_docker.yml) | Image depuis le contexte (ou le repo), test optionnel, push GHCR avec les tags du mode | `contents: read` (+ `packages: write` pour publier) |
+| [`_release`](.github/workflows/_release.yml) | Tag + GitHub Release, artefacts attachés + `SHA256SUMS`, idempotent | `contents: write` |
+| [`_deploy`](.github/workflows/_deploy.yml) | Déploiement Dokploy dans un environnement GitHub ; sans jeton, ne fait rien | `contents: read` |
+
+Chaque job récupère les actions de ce repo dans `.rawz06-ci/` à la ref `tooling-ref` (défaut `v1`).
+`_java` et `_docker` ne déclarent pas de permissions et héritent de celles de l'appelant :
+GitHub vérifie les permissions d'un job réutilisable sans tenir compte des `if:`.
 
 ### Images de base
 
@@ -86,5 +107,6 @@ for n in $(jq -r '.[].name' images/images.json); do docker build -t "local/${n}:
 tests/base-images.sh
 ```
 
-En CI, `self-test.yml` lance aussi actionlint, zizmor, hadolint, shellcheck et chaque action `setup-*` sur sa fixture ;
+En CI, `self-test.yml` lance aussi actionlint, zizmor, hadolint, shellcheck, chaque action `setup-*` sur sa fixture,
+et les jobs réutilisables de bout en bout (build, contexte, image testée) sans rien publier ;
 `base-images.yml` reconstruit et teste chaque image sur les deux architectures.

@@ -93,6 +93,9 @@ jobs:
       - name: dokploy-deploy
         run: tests/dokploy-deploy.sh
 
+      - name: prepare-image-context
+        run: tests/prepare-image-context.sh
+
   # Les actions setup-* sur de vrais mini-projets : installation, cache, build versionné.
   setup-java:
     name: setup-java
@@ -189,3 +192,151 @@ jobs:
         env:
           RUST_TARGET: x86_64-unknown-linux-musl
         run: tests/fixtures.sh rust
+
+  # Bout en bout : les jobs réutilisables appelés comme le feront les pipelines,
+  # avec les actions de ce commit (tooling-ref) et sans rien publier.
+  e2e-version:
+    name: e2e / version
+    uses: ./.github/workflows/_version.yml
+    permissions:
+      contents: read
+    with:
+      mode: ci
+      working-directory: tests/fixtures/node
+      tooling-ref: ${{ github.sha }}
+
+  e2e-java:
+    name: e2e / java
+    needs: e2e-version
+    uses: ./.github/workflows/_java.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      version: ${{ needs.e2e-version.outputs.version }}
+      working-directory: tests/fixtures/maven
+      image: true
+      artifact-name: image-context-java
+      tooling-ref: ${{ github.sha }}
+
+  e2e-java-image:
+    name: e2e / java image
+    needs: [e2e-version, e2e-java]
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: fixture-java
+      version: ${{ needs.e2e-version.outputs.version }}
+      mode: ci
+      context-artifact: image-context-java
+      test-expect: fixture ${{ needs.e2e-version.outputs.version }}
+
+  e2e-node:
+    name: e2e / node
+    needs: e2e-version
+    uses: ./.github/workflows/_node.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      version: ${{ needs.e2e-version.outputs.version }}
+      working-directory: tests/fixtures/node
+      image: true
+      image-files: dist
+      artifact-name: image-context-node
+      tooling-ref: ${{ github.sha }}
+
+  e2e-node-image:
+    name: e2e / node image
+    needs: [e2e-version, e2e-node]
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: fixture-node
+      version: ${{ needs.e2e-version.outputs.version }}
+      mode: ci
+      context-artifact: image-context-node
+      test-expect: ${{ needs.e2e-version.outputs.version }}
+
+  e2e-php:
+    name: e2e / php
+    needs: e2e-version
+    uses: ./.github/workflows/_php.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.e2e-version.outputs.version }}
+      working-directory: tests/fixtures/php
+      image: true
+      artifact-name: image-context-php
+      tooling-ref: ${{ github.sha }}
+
+  e2e-php-image:
+    name: e2e / php image
+    needs: [e2e-version, e2e-php]
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: fixture-php
+      version: ${{ needs.e2e-version.outputs.version }}
+      mode: ci
+      context-artifact: image-context-php
+      test-expect: fixture ${{ needs.e2e-version.outputs.version }}
+
+  e2e-rust:
+    name: e2e / rust
+    needs: e2e-version
+    uses: ./.github/workflows/_rust.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.e2e-version.outputs.version }}
+      working-directory: tests/fixtures/rust
+      image: true
+      binaries: fixture
+      artifact-name: image-context-rust
+      tooling-ref: ${{ github.sha }}
+
+  e2e-rust-image:
+    name: e2e / rust image
+    needs: [e2e-version, e2e-rust]
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: fixture-rust
+      version: ${{ needs.e2e-version.outputs.version }}
+      mode: ci
+      context-artifact: image-context-rust
+      test-expect: fixture ${{ needs.e2e-version.outputs.version }}
+
+  e2e-rust-binaries:
+    name: e2e / rust binaries
+    needs: e2e-version
+    uses: ./.github/workflows/_rust-binaries.yml
+    permissions:
+      contents: read
+    with:
+      version: ${{ needs.e2e-version.outputs.version }}
+      binary: fixture
+      working-directory: tests/fixtures/rust
+      version-check: true
+      targets: '[{"name": "linux-x86_64", "runner": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu"}]'
+      tooling-ref: ${{ github.sha }}
+
+  e2e-docker-from-repo:
+    name: e2e / docker from repo
+    needs: e2e-version
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: fixture-docker
+      version: ${{ needs.e2e-version.outputs.version }}
+      mode: ci
+      context-artifact: ""
+      working-directory: tests/fixtures/docker
+      test-expect: fixture ${{ needs.e2e-version.outputs.version }}

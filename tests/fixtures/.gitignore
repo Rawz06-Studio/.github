@@ -6,3 +6,5 @@ node/dist/
 php/vendor/
 php/VERSION
 rust/target/
+maven/app.jar
+rust/bin/
