@@ -1,0 +1,134 @@
+name: _node
+
+# Job réutilisable : install, lint, typecheck, tests et build pnpm avec la version
+# injectée ; contexte Docker optionnel (sorties du build + dépendances de prod).
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version à injecter
+        type: string
+        required: true
+      node-version:
+        description: Vide = .nvmrc / .node-version du projet, sinon 24
+        type: string
+        default: ""
+      working-directory:
+        type: string
+        default: .
+      scripts:
+        description: Scripts package.json lancés dans l'ordre s'ils existent
+        type: string
+        default: lint typecheck test build
+      image:
+        description: Préparer le contexte Docker
+        type: boolean
+        default: false
+      image-files:
+        description: >-
+          Fichiers embarqués dans l'image, un par ligne
+          (Nuxt : .output ; serveur : dist, package.json, node_modules…)
+        type: string
+        default: .output
+      prod-dependencies:
+        description: >-
+          Réinstaller node_modules sans les devDependencies avant de préparer l'image
+          (serveurs Node ; inutile pour Nuxt dont .output est autonome)
+        type: boolean
+        default: false
+      native-modules:
+        description: >-
+          Installer les dépendances de prod dans node:<version>-trixie (même libc que
+          node-runtime) pour les modules natifs comme better-sqlite3
+        type: boolean
+        default: false
+      dockerfile:
+        type: string
+        default: Dockerfile
+      artifact-name:
+        description: Nom de l'artefact du contexte Docker (unique dans le run)
+        type: string
+        default: image-context
+      tooling-ref:
+        type: string
+        default: v1
+
+permissions: {}
+
+jobs:
+  build:
+    name: Node
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Setup Node
+        id: node
+        uses: ./.rawz06-ci/actions/setup-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Set version
+        uses: ./.rawz06-ci/actions/set-version
+        with:
+          version: ${{ inputs.version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Run scripts
+        env:
+          SCRIPTS: ${{ inputs.scripts }}
+        run: |
+          for script in $SCRIPTS; do
+            echo "::group::pnpm run $script"
+            pnpm run --if-present "$script"
+            echo "::endgroup::"
+          done
+
+      - name: Install production dependencies
+        if: inputs.image && inputs.prod-dependencies && !inputs.native-modules
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+        run: pnpm install --prod --frozen-lockfile --config.confirmModulesPurge=false
+
+      - name: Install production dependencies (native modules)
+        if: inputs.image && inputs.prod-dependencies && inputs.native-modules
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
+          NODE_VERSION: ${{ steps.node.outputs.node-version }}
+        run: |
+          major="${NODE_VERSION#v}"; major="${major%%.*}"
+          rm -rf node_modules
+          docker run --rm \
+            -v "$PWD:/app" -w /app \
+            -v "$NPM_CONFIG_USERCONFIG:/tmp/.npmrc:ro" -e NPM_CONFIG_USERCONFIG=/tmp/.npmrc \
+            -e NODE_AUTH_TOKEN -e CI=true \
+            "node:${major}-trixie" \
+            sh -c 'corepack enable && pnpm install --prod --frozen-lockfile && chown -R "$(stat -c %u:%g package.json)" node_modules'
+
+      - name: Prepare image context
+        if: inputs.image
+        uses: ./.rawz06-ci/actions/prepare-image-context
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          dockerfile: ${{ inputs.dockerfile }}
+          artifact-name: ${{ inputs.artifact-name }}
+          files: ${{ inputs.image-files }}

@@ -1,0 +1,6 @@
+# Configuration de hadolint (lint des Dockerfiles).
+ignored:
+  # Les images de base sont reconstruites chaque semaine pour récupérer les derniers
+  # correctifs de sécurité : épingler les versions des paquets irait à l'encontre de ça.
+  - DL3008 # apt-get install sans version
+  - DL3018 # apk add sans version

@@ -1,0 +1,11 @@
+{
+    "name": "rawz06-studio/fixture",
+    "description": "Projet minimal pour tester setup-php + set-version",
+    "type": "project",
+    "require": {
+        "php": ">=8.4"
+    },
+    "autoload": {
+        "psr-4": { "Fixture\\": "src/" }
+    }
+}

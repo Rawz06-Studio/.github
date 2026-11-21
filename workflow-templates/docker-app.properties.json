@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · docker-app",
+  "description": "Image Docker construite depuis le repo : release et déploiement Dokploy",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "Dockerfile$"
+  ]
+}

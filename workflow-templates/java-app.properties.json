@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · java-app",
+  "description": "Application Java (Spring Boot…) : tests, image Docker, release et déploiement Dokploy",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "pom\\.xml$"
+  ]
+}

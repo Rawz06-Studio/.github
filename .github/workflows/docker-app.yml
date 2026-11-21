@@ -1,0 +1,150 @@
+name: docker-app
+
+# Pipeline d'une application dont le Dockerfile fait tout (site HTML, cas particuliers).
+#
+#   PR / branche      version ci      → docker build → image construite (et testée), non publiée
+#   PR label preview  version rc      → docker build → image :preview publiée → déploiement preprod
+#   push main         version release → docker build → image :<version> :latest → tag + Release → prod
+#
+# Modèle d'appel : workflow-templates/docker-app.yml. Permissions à accorder :
+# contents: write, packages: write (chaque job n'utilise que ce dont il a besoin).
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Nom de l'image (ghcr.io/<org>/<image-name>)
+        type: string
+        required: true
+      working-directory:
+        description: Contexte Docker (dossier contenant le Dockerfile)
+        type: string
+        default: .
+      build-args:
+        description: Arguments de build supplémentaires, un par ligne
+        type: string
+        default: ""
+      dockerfile:
+        type: string
+        default: Dockerfile
+      platforms:
+        type: string
+        default: linux/amd64
+      test-command:
+        description: Arguments de `docker run` pour tester l'image avant publication
+        type: string
+        default: ""
+      test-expect:
+        description: Texte attendu dans la sortie du test
+        type: string
+        default: ""
+      mode:
+        description: "auto (déduit de l'événement) | release | preview | ci"
+        type: string
+        default: auto
+      initial-version:
+        description: Version de la toute première release (vide = 0.1.0)
+        type: string
+        default: ""
+      tooling-ref:
+        description: Ref de Rawz06-Studio/.github pour les actions
+        type: string
+        default: v1
+    secrets:
+      DOKPLOY_WEBHOOK:
+        description: URL du webhook Dokploy de l'app de prod
+        required: false
+      DOKPLOY_PREVIEW_WEBHOOK:
+        description: URL du webhook Dokploy de l'app de preprod (absent = pas de déploiement preview)
+        required: false
+    outputs:
+      mode:
+        value: ${{ jobs.version.outputs.mode }}
+      version:
+        value: ${{ jobs.version.outputs.version }}
+
+permissions: {}
+
+jobs:
+  version:
+    uses: ./.github/workflows/_version.yml
+    permissions:
+      contents: read
+    with:
+      mode: ${{ inputs.mode }}
+      initial-version: ${{ inputs.initial-version }}
+      working-directory: ${{ inputs.working-directory }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  image-check:
+    needs: version
+    if: needs.version.outputs.mode == 'ci'
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+    with:
+      image-name: ${{ inputs.image-name }}
+      version: ${{ needs.version.outputs.version }}
+      mode: ci
+      context-artifact: ""
+      working-directory: ${{ inputs.working-directory }}
+      dockerfile: ${{ inputs.dockerfile }}
+      build-args: ${{ inputs.build-args }}
+      platforms: ${{ inputs.platforms }}
+      test-command: ${{ inputs.test-command }}
+      test-expect: ${{ inputs.test-expect }}
+
+  image:
+    needs: version
+    if: needs.version.outputs.mode != 'ci'
+    uses: ./.github/workflows/_docker.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      image-name: ${{ inputs.image-name }}
+      version: ${{ needs.version.outputs.version }}
+      mode: ${{ needs.version.outputs.mode }}
+      push: true
+      context-artifact: ""
+      working-directory: ${{ inputs.working-directory }}
+      dockerfile: ${{ inputs.dockerfile }}
+      build-args: ${{ inputs.build-args }}
+      platforms: ${{ inputs.platforms }}
+      test-command: ${{ inputs.test-command }}
+      test-expect: ${{ inputs.test-expect }}
+      pr-number: ${{ needs.version.outputs.pr-number }}
+
+  release:
+    needs: [version, image]
+    if: needs.version.outputs.mode == 'release'
+    uses: ./.github/workflows/_release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      previous-tag: ${{ needs.version.outputs.previous-tag }}
+
+  deploy:
+    needs: [version, release]
+    if: needs.version.outputs.mode == 'release'
+    uses: ./.github/workflows/_deploy.yml
+    permissions:
+      contents: read
+    with:
+      environment: production
+      tooling-ref: ${{ inputs.tooling-ref }}
+    secrets:
+      webhook-url: ${{ secrets.DOKPLOY_WEBHOOK }}
+
+  deploy-preview:
+    needs: [version, image]
+    if: needs.version.outputs.mode == 'preview'
+    uses: ./.github/workflows/_deploy.yml
+    permissions:
+      contents: read
+    with:
+      environment: preview
+      tooling-ref: ${{ inputs.tooling-ref }}
+    secrets:
+      webhook-url: ${{ secrets.DOKPLOY_PREVIEW_WEBHOOK }}

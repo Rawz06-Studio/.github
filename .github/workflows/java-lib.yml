@@ -1,0 +1,90 @@
+name: java-lib
+
+# Pipeline d'une bibliothèque Maven publiée sur GitHub Packages.
+#
+#   PR / branche      version ci      → mvn verify
+#   PR label preview  version rc      → mvn verify → publication 1.4.3-rc.N
+#   push main         version release → mvn verify → publication 1.4.3 → tag + Release
+#
+# Le pom déclare <version>${revision}</version> et flatten-maven-plugin
+# (resolveCiFriendliesOnly), sinon le pom publié contient ${revision}.
+#
+# Modèle d'appel : workflow-templates/java-lib.yml. Permissions à accorder :
+# contents: write, packages: write.
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        default: "25"
+      working-directory:
+        type: string
+        default: .
+      mode:
+        description: "auto (déduit de l'événement) | release | preview | ci"
+        type: string
+        default: auto
+      initial-version:
+        description: Version de la toute première release (vide = lue dans le pom)
+        type: string
+        default: ""
+      tooling-ref:
+        description: Ref de Rawz06-Studio/.github pour les actions
+        type: string
+        default: v1
+    outputs:
+      mode:
+        value: ${{ jobs.version.outputs.mode }}
+      version:
+        value: ${{ jobs.version.outputs.version }}
+
+permissions: {}
+
+jobs:
+  version:
+    uses: ./.github/workflows/_version.yml
+    permissions:
+      contents: read
+    with:
+      mode: ${{ inputs.mode }}
+      initial-version: ${{ inputs.initial-version }}
+      working-directory: ${{ inputs.working-directory }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  build:
+    needs: version
+    if: needs.version.outputs.mode == 'ci'
+    uses: ./.github/workflows/_java.yml
+    permissions:
+      contents: read
+      packages: read
+    with:
+      version: ${{ needs.version.outputs.version }}
+      java-version: ${{ inputs.java-version }}
+      working-directory: ${{ inputs.working-directory }}
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  publish:
+    needs: version
+    if: needs.version.outputs.mode != 'ci'
+    uses: ./.github/workflows/_java.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      version: ${{ needs.version.outputs.version }}
+      java-version: ${{ inputs.java-version }}
+      working-directory: ${{ inputs.working-directory }}
+      publish: true
+      tooling-ref: ${{ inputs.tooling-ref }}
+
+  release:
+    needs: [version, publish]
+    if: needs.version.outputs.mode == 'release'
+    uses: ./.github/workflows/_release.yml
+    permissions:
+      contents: write
+    with:
+      tag: ${{ needs.version.outputs.tag }}
+      previous-tag: ${{ needs.version.outputs.previous-tag }}

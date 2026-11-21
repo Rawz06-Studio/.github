@@ -1,0 +1,11 @@
+{
+  "name": "Rawz06 · rust-desktop",
+  "description": "Application desktop Rust : tests et binaires multi-plateformes attachés à la release",
+  "iconName": "octicon rocket",
+  "categories": [
+    "Deployment"
+  ],
+  "filePatterns": [
+    "Cargo\\.toml$"
+  ]
+}

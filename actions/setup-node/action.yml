@@ -1,0 +1,84 @@
+name: Setup Node
+description: >-
+  Installe pnpm (version de `packageManager`) et Node, met en cache le store pnpm,
+  configure le registre GitHub Packages pour le scope de l'organisation et installe
+  les dépendances.
+
+inputs:
+  node-version:
+    description: >-
+      Version de Node. Vide = .nvmrc ou .node-version du projet s'ils existent, sinon 24.
+    required: false
+    default: ""
+  pnpm-version:
+    description: Version de pnpm. Vide = champ `packageManager` du package.json.
+    required: false
+    default: ""
+  working-directory:
+    description: Dossier du projet (contient package.json et pnpm-lock.yaml)
+    required: false
+    default: .
+  registry-scope:
+    description: Scope npm servi par GitHub Packages
+    required: false
+    default: "@rawz06-studio"
+  install:
+    description: Lancer `pnpm install --frozen-lockfile`
+    required: false
+    default: "true"
+  token:
+    description: Jeton de lecture de GitHub Packages, utilisé seulement pendant l'installation
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  node-version:
+    description: Version de Node installée
+    value: ${{ steps.node.outputs.node-version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Node version
+      id: resolve
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        REQUESTED: ${{ inputs.node-version }}
+      run: |
+        if [ -n "$REQUESTED" ]; then
+          version="$REQUESTED"
+        elif [ -f .nvmrc ]; then
+          version="$(tr -d '[:space:]' <.nvmrc)"
+        elif [ -f .node-version ]; then
+          version="$(tr -d '[:space:]' <.node-version)"
+        else
+          version=24
+        fi
+        echo "Node $version"
+        echo "version=$version" >>"$GITHUB_OUTPUT"
+
+    - name: Set up pnpm
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      with:
+        version: ${{ inputs.pnpm-version }}
+        package_json_file: ${{ inputs.working-directory }}/package.json
+
+    - name: Set up Node
+      id: node
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: ${{ steps.resolve.outputs.version }}
+        cache: pnpm
+        cache-dependency-path: ${{ inputs.working-directory }}/pnpm-lock.yaml
+        # .npmrc généré hors du projet, avec ${NODE_AUTH_TOKEN} : celui du projet est conservé.
+        registry-url: https://npm.pkg.github.com
+        scope: ${{ inputs.registry-scope }}
+
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.token }}
+      run: pnpm install --frozen-lockfile

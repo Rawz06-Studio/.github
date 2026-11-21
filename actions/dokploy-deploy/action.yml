@@ -1,0 +1,18 @@
+name: Dokploy deploy
+description: >-
+  Déclenche le redéploiement d'une application Dokploy en appelant son webhook
+  (méthode recommandée par Dokploy). L'URL contient un jeton : la passer en secret.
+
+inputs:
+  webhook-url:
+    description: URL du webhook de l'application (https://<instance>/api/deploy/<jeton>), secret
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy
+      shell: bash
+      env:
+        DOKPLOY_WEBHOOK_URL: ${{ inputs.webhook-url }}
+      run: "${GITHUB_ACTION_PATH}/deploy.sh"

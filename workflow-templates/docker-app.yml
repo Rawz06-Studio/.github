@@ -1,0 +1,46 @@
+# Pipeline image Docker (le Dockerfile fait tout) — Rawz06-Studio
+#
+#   PR / branche          → image construite
+#   PR avec label preview → image :preview publiée + déploiement preprod
+#   push sur $default-branch → image :<version> + release + déploiement prod
+#   Actions > Pipeline > Run workflow : release ou preview à la demande, bump forcé
+#
+# Secrets du repo : DOKPLOY_WEBHOOK = « Webhook URL » de l'app de prod dans Dokploy,
+# DOKPLOY_PREVIEW_WEBHOOK = celle de l'app de preprod (facultatif).
+#
+name: Pipeline
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Ce que fait le run
+        type: choice
+        default: release
+        options: [release, preview]
+      bump:
+        description: Niveau de version de la release
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
+
+# Une seule release à la fois sur $default-branch ; une PR annule son run précédent.
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  pipeline:
+    uses: Rawz06-Studio/.github/.github/workflows/docker-app.yml@v1
+    permissions:
+      contents: write
+      packages: write
+    with:
+      image-name: mon-site
+    secrets: inherit

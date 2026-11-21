@@ -1,0 +1,107 @@
+name: _php
+
+# Job réutilisable : dépendances Composer, tests, puis contexte Docker optionnel
+# avec les dépendances de prod (vendor/ sans require-dev) et le fichier VERSION.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version à injecter (fichier VERSION)
+        type: string
+        required: true
+      php-version:
+        type: string
+        default: "8.4"
+      working-directory:
+        type: string
+        default: .
+      test-command:
+        description: >-
+          Commande de test. Vide = `composer test` si le script existe,
+          sinon vendor/bin/phpunit si présent, sinon aucun test.
+        type: string
+        default: ""
+      image:
+        description: Préparer le contexte Docker
+        type: boolean
+        default: false
+      image-files:
+        description: "Fichiers embarqués dans l'image, un par ligne (défaut : tout le projet)"
+        type: string
+        default: .
+      dockerfile:
+        type: string
+        default: Dockerfile
+      artifact-name:
+        description: Nom de l'artefact du contexte Docker (unique dans le run)
+        type: string
+        default: image-context
+      tooling-ref:
+        type: string
+        default: v1
+
+permissions: {}
+
+jobs:
+  build:
+    name: PHP
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: ./.rawz06-ci/actions/setup-php
+        with:
+          php-version: ${{ inputs.php-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Test
+        env:
+          TEST_COMMAND: ${{ inputs.test-command }}
+        run: |
+          if [ -n "$TEST_COMMAND" ]; then
+            bash -c "$TEST_COMMAND"
+          elif composer run-script --list 2>/dev/null | grep -qE '^\s*test\b'; then
+            composer test
+          elif [ -x vendor/bin/phpunit ]; then
+            vendor/bin/phpunit
+          else
+            echo "::notice::Aucun test configuré"
+          fi
+
+      - name: Production dependencies
+        if: inputs.image
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader --classmap-authoritative
+
+      - name: Set version
+        if: inputs.image
+        uses: ./.rawz06-ci/actions/set-version
+        with:
+          version: ${{ inputs.version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Prepare image context
+        if: inputs.image
+        uses: ./.rawz06-ci/actions/prepare-image-context
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          dockerfile: ${{ inputs.dockerfile }}
+          artifact-name: ${{ inputs.artifact-name }}
+          files: ${{ inputs.image-files }}

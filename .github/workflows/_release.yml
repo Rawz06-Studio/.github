@@ -1,0 +1,81 @@
+name: _release
+
+# Job réutilisable : crée le tag et la GitHub Release (notes générées) sur le commit
+# du run, en attachant les artefacts demandés et un fichier SHA256SUMS.
+# Relancé sur un commit déjà releasé, il ne fait que remplacer les fichiers attachés.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag à créer (ex. v1.4.3)
+        type: string
+        required: true
+      previous-tag:
+        description: Tag précédent, début des notes de version
+        type: string
+        default: ""
+      title:
+        description: Titre de la release (défaut = le tag)
+        type: string
+        default: ""
+      assets-pattern:
+        description: Motif des artefacts du run à attacher (ex. binaries-*), vide = aucun
+        type: string
+        default: ""
+      prerelease:
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download assets
+        if: inputs.assets-pattern != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ inputs.assets-pattern }}
+          path: ${{ runner.temp }}/assets
+          merge-multiple: true
+
+      - name: Checksums
+        if: inputs.assets-pattern != ''
+        working-directory: ${{ runner.temp }}/assets
+        run: |
+          sha256sum -- * >SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or update release
+        env:
+          PREVIOUS_TAG: ${{ inputs.previous-tag }}
+          TITLE: ${{ inputs.title }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          HAS_ASSETS: ${{ inputs.assets-pattern != '' }}
+        run: |
+          assets=()
+          if [ "$HAS_ASSETS" = true ]; then
+            for f in "$RUNNER_TEMP"/assets/*; do assets+=("$f"); done
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "La release $TAG existe déjà"
+            if [ "${#assets[@]}" -gt 0 ]; then
+              gh release upload "$TAG" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+            fi
+            exit 0
+          fi
+
+          args=(--repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "${TITLE:-$TAG}" --generate-notes)
+          [ -n "$PREVIOUS_TAG" ] && args+=(--notes-start-tag "$PREVIOUS_TAG")
+          [ "$PRERELEASE" = true ] && args+=(--prerelease)
+          gh release create "$TAG" "${args[@]}" "${assets[@]}"
+          echo "Release [$TAG]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG) créée" >>"$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,59 @@
+name: _deploy
+
+# Job réutilisable : déploiement Dokploy par webhook dans un environnement GitHub
+# (historique des déploiements visible dans le repo). Sans webhook fourni, le job
+# réussit sans rien déployer : un projet sans preprod n'a simplement pas ce secret.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environnement GitHub (production, preview)
+        type: string
+        required: true
+      tooling-ref:
+        type: string
+        default: v1
+    secrets:
+      webhook-url:
+        description: URL du webhook de l'application Dokploy (https://<instance>/api/deploy/<jeton>)
+        required: false
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          HAS_WEBHOOK: ${{ secrets.webhook-url != '' }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [ "$HAS_WEBHOOK" != true ]; then
+            echo "::notice::Pas de webhook Dokploy pour $ENVIRONMENT : rien à déployer"
+            echo "deploy=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout CI tooling
+        if: steps.config.outputs.deploy == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Deploy
+        if: steps.config.outputs.deploy == 'true'
+        uses: ./.rawz06-ci/actions/dokploy-deploy
+        with:
+          webhook-url: ${{ secrets.webhook-url }}

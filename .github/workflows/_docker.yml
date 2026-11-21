@@ -1,0 +1,211 @@
+name: _docker
+
+# Job réutilisable : construit l'image d'une application à partir du contexte préparé
+# par le job de build (artefact image-context) ou directement depuis le repo,
+# la teste optionnellement, puis la publie sur GHCR.
+#
+# Tags publiés :
+#   release  <version>, latest, sha-<commit>
+#   preview  <version> (rc), preview, pr-<numéro> si fourni
+#   ci       aucun (build et test seulement)
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Nom de l'image (ghcr.io/<org>/<image-name>)
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+      mode:
+        description: "release | preview | ci"
+        type: string
+        required: true
+      push:
+        description: Publier l'image (ignoré en mode ci)
+        type: boolean
+        default: false
+      context-artifact:
+        description: Artefact du contexte Docker ; vide = construire depuis le repo
+        type: string
+        default: image-context
+      working-directory:
+        description: Contexte quand l'image est construite depuis le repo
+        type: string
+        default: .
+      dockerfile:
+        description: Dockerfile quand l'image est construite depuis le repo
+        type: string
+        default: Dockerfile
+      platforms:
+        type: string
+        default: linux/amd64
+      build-args:
+        description: Arguments de build, un par ligne (APP_VERSION est toujours fourni)
+        type: string
+        default: ""
+      test-command:
+        description: >-
+          Arguments passés à `docker run --rm <image>` pour tester l'image avant
+          publication (vide = commande par défaut de l'image)
+        type: string
+        default: ""
+      test-expect:
+        description: >-
+          Texte attendu dans la sortie du test. Le test tourne si test-command ou
+          test-expect est renseigné, sur linux/amd64 uniquement.
+        type: string
+        default: ""
+      pr-number:
+        description: Numéro de PR pour le tag pr-<n> en preview
+        type: string
+        default: ""
+    outputs:
+      image:
+        description: Référence de l'image publiée (sans tag)
+        value: ${{ jobs.image.outputs.image }}
+      digest:
+        description: Digest de l'image publiée
+        value: ${{ jobs.image.outputs.digest }}
+
+# Pas de bloc permissions : hérite de l'appelant, qui accorde packages: write
+# seulement quand il publie (voir l'explication dans _java.yml).
+
+jobs:
+  image:
+    name: Docker
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    env:
+      MODE: ${{ inputs.mode }}
+      VERSION: ${{ inputs.version }}
+      PUSH: ${{ inputs.push && inputs.mode != 'ci' }}
+      TEST: ${{ inputs.test-command != '' || inputs.test-expect != '' }}
+    steps:
+      - name: Checkout
+        if: inputs.context-artifact == ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download context
+        if: inputs.context-artifact != ''
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ inputs.context-artifact }}
+          path: ${{ runner.temp }}/context-archive
+
+      - name: Resolve context and tags
+        id: meta
+        env:
+          CONTEXT_ARTIFACT: ${{ inputs.context-artifact }}
+          WORKDIR: ${{ inputs.working-directory }}
+          DOCKERFILE: ${{ inputs.dockerfile }}
+          IMAGE_NAME: ${{ inputs.image-name }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+        run: |
+          if [ -n "$CONTEXT_ARTIFACT" ]; then
+            context="$RUNNER_TEMP/context"
+            mkdir -p "$context"
+            tar -xf "$RUNNER_TEMP/context-archive/image-context.tar" -C "$context"
+            file="$context/Dockerfile"
+          else
+            context="$GITHUB_WORKSPACE/$WORKDIR"
+            file="$context/$DOCKERFILE"
+          fi
+          [ -f "$file" ] || { echo "::error::Dockerfile introuvable : $file"; exit 1; }
+
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME"
+          case "$MODE" in
+            release) tags=("$image:$VERSION" "$image:latest" "$image:sha-${GITHUB_SHA::7}") ;;
+            preview)
+              tags=("$image:$VERSION" "$image:preview")
+              [ -n "$PR_NUMBER" ] && tags+=("$image:pr-$PR_NUMBER") ;;
+            ci) tags=("$image:ci") ;;
+            *) echo "::error::mode invalide : $MODE"; exit 1 ;;
+          esac
+
+          {
+            echo "context=$context"
+            echo "file=$file"
+            echo "image=$image"
+            echo "local=local/$IMAGE_NAME:test"
+            echo "tags<<EOF"
+            printf '%s\n' "${tags[@]}"
+            echo "EOF"
+          } >>"$GITHUB_OUTPUT"
+          printf 'Tags : %s\n' "${tags[*]}"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build
+        if: env.PUSH != 'true' || env.TEST == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ steps.meta.outputs.context }}
+          file: ${{ steps.meta.outputs.file }}
+          platforms: ${{ (inputs.test-command != '' || inputs.test-expect != '') && 'linux/amd64' || inputs.platforms }}
+          load: ${{ inputs.test-command != '' || inputs.test-expect != '' }}
+          tags: ${{ steps.meta.outputs.local }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            ${{ inputs.build-args }}
+          provenance: false
+
+      - name: Test image
+        if: env.TEST == 'true'
+        env:
+          LOCAL: ${{ steps.meta.outputs.local }}
+          TEST_COMMAND: ${{ inputs.test-command }}
+          EXPECT: ${{ inputs.test-expect }}
+        run: |
+          # shellcheck disable=SC2086 # arguments du conteneur
+          output="$(docker run --rm "$LOCAL" $TEST_COMMAND 2>&1)"
+          echo "$output"
+          if [ -n "$EXPECT" ] && ! grep -qF -- "$EXPECT" <<<"$output"; then
+            echo "::error::sortie du test sans « $EXPECT »"
+            exit 1
+          fi
+
+      - name: Log in to GHCR
+        if: env.PUSH == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push
+        id: push
+        if: env.PUSH == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ steps.meta.outputs.context }}
+          file: ${{ steps.meta.outputs.file }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            APP_VERSION=${{ inputs.version }}
+            ${{ inputs.build-args }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+          provenance: false
+
+      - name: Summary
+        if: env.PUSH == 'true'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "### Image publiée"
+            while IFS= read -r tag; do echo "- \`$tag\`"; done <<<"$TAGS"
+            echo "- digest \`$DIGEST\`"
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,142 @@
+name: _java
+
+# Job réutilisable : build et tests Maven avec la version injectée, publication
+# optionnelle sur GitHub Packages, contexte Docker optionnel (jar renommé app.jar).
+#
+# Le pom doit déclarer <version>${revision}</version> ; une lib publiée a besoin de
+# flatten-maven-plugin (resolveCiFriendliesOnly), voir ARCHITECTURE.md §3.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version à injecter
+        type: string
+        required: true
+      java-version:
+        type: string
+        default: "25"
+      working-directory:
+        type: string
+        default: .
+      publish:
+        description: Publier les artefacts Maven sur GitHub Packages (libs)
+        type: boolean
+        default: false
+      image:
+        description: Préparer le contexte Docker (app.jar + Dockerfile + image-files)
+        type: boolean
+        default: false
+      jar:
+        description: Jar à embarquer, relatif au projet (vide = l'unique jar exécutable de target/)
+        type: string
+        default: ""
+      dockerfile:
+        type: string
+        default: Dockerfile
+      image-files:
+        description: Fichiers supplémentaires pour l'image, un par ligne (ex. weights/)
+        type: string
+        default: ""
+      artifact-name:
+        description: Nom de l'artefact du contexte Docker (unique dans le run)
+        type: string
+        default: image-context
+      tooling-ref:
+        type: string
+        default: v1
+
+# Pas de bloc permissions : le job hérite de celles de l'appelant. GitHub vérifie les
+# permissions des jobs réutilisables sans tenir compte des `if:`, donc un job qui ne
+# publie que sur option ne peut pas déclarer `packages: write` sans l'imposer à tous.
+# L'appelant accorde : contents: read + packages: read, ou packages: write si publish.
+
+jobs:
+  build:
+    name: Maven
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      MAVEN_USERNAME: ${{ github.actor }}
+      MAVEN_PASSWORD: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Setup Java
+        id: java
+        uses: ./.rawz06-ci/actions/setup-java
+        with:
+          java-version: ${{ inputs.java-version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Set version
+        uses: ./.rawz06-ci/actions/set-version
+        with:
+          version: ${{ inputs.version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Build & test
+        env:
+          MVN: ${{ steps.java.outputs.mvn }}
+        run: $MVN verify
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: ${{ inputs.working-directory }}/**/target/surefire-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Publish to GitHub Packages
+        if: inputs.publish
+        env:
+          MVN: ${{ steps.java.outputs.mvn }}
+        run: |
+          $MVN deploy -DskipTests \
+            "-DaltDeploymentRepository=github::https://maven.pkg.github.com/$GITHUB_REPOSITORY"
+
+      - name: Select application jar
+        id: jar
+        if: inputs.image
+        env:
+          JAR: ${{ inputs.jar }}
+        run: |
+          if [ -z "$JAR" ]; then
+            mapfile -t jars < <(find target -maxdepth 1 -name '*.jar' \
+              ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' ! -name 'original-*.jar' \
+              ! -name 'app.jar' | sort)
+            if [ "${#jars[@]}" -ne 1 ]; then
+              echo "::error::${#jars[@]} jars candidats dans target/ (${jars[*]:-aucun}) : préciser l'input jar"
+              exit 1
+            fi
+            JAR="${jars[0]}"
+          fi
+          [ -f "$JAR" ] || { echo "::error::jar introuvable : $JAR"; exit 1; }
+          cp "$JAR" app.jar
+          echo "Jar embarqué : $JAR"
+
+      - name: Prepare image context
+        if: inputs.image
+        uses: ./.rawz06-ci/actions/prepare-image-context
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          dockerfile: ${{ inputs.dockerfile }}
+          artifact-name: ${{ inputs.artifact-name }}
+          files: |
+            app.jar
+            ${{ inputs.image-files }}

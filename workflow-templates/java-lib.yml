@@ -1,0 +1,46 @@
+# Pipeline bibliothèque Maven — Rawz06-Studio
+#
+#   PR / branche          → mvn verify
+#   PR avec label preview → publication 1.2.3-rc.N
+#   push sur $default-branch → publication sur GitHub Packages + release
+#   Actions > Pipeline > Run workflow : release ou preview à la demande, bump forcé
+#
+# Le pom déclare <version>${revision}</version> et flatten-maven-plugin
+# (flattenMode resolveCiFriendliesOnly).
+#
+name: Pipeline
+
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Ce que fait le run
+        type: choice
+        default: release
+        options: [release, preview]
+      bump:
+        description: Niveau de version de la release
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
+
+# Une seule release à la fois sur $default-branch ; une PR annule son run précédent.
+concurrency:
+  group: pipeline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  pipeline:
+    uses: Rawz06-Studio/.github/.github/workflows/java-lib.yml@v1
+    permissions:
+      contents: write
+      packages: write
+    with:
+      java-version: "25"
+    secrets: inherit

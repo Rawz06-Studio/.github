@@ -1,0 +1,159 @@
+name: _rust
+
+# Job réutilisable : fmt, clippy et tests ; pour une image, binaires serveur en
+# statique (musl) et client WASM optionnel via trunk.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Version à injecter
+        type: string
+        required: true
+      working-directory:
+        type: string
+        default: .
+      toolchain:
+        description: Vide = rust-toolchain.toml du projet, sinon stable
+        type: string
+        default: ""
+      linux-packages:
+        description: Paquets apt nécessaires à la compilation (bibliothèques système)
+        type: string
+        default: ""
+      checks:
+        description: Lancer cargo fmt, clippy et test
+        type: boolean
+        default: true
+      clippy-args:
+        type: string
+        default: --workspace --all-targets -- -D warnings
+      test-args:
+        type: string
+        default: --workspace --locked
+      image:
+        description: Préparer le contexte Docker (binaires musl dans bin/)
+        type: boolean
+        default: false
+      binaries:
+        description: Packages Cargo dont le binaire va dans l'image, séparés par des espaces
+        type: string
+        default: ""
+      trunk-dir:
+        description: Dossier du client WASM à construire avec trunk (vide = pas de client)
+        type: string
+        default: ""
+      trunk-version:
+        type: string
+        default: v0.22.1
+      image-files:
+        description: Fichiers supplémentaires pour l'image, un par ligne (ex. dist, public)
+        type: string
+        default: ""
+      dockerfile:
+        type: string
+        default: Dockerfile
+      artifact-name:
+        description: Nom de l'artefact du contexte Docker (unique dans le run)
+        type: string
+        default: image-context
+      tooling-ref:
+        type: string
+        default: v1
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  MUSL_TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  build:
+    name: Rust
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Checkout CI tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: Rawz06-Studio/.github
+          ref: ${{ inputs.tooling-ref }}
+          path: .rawz06-ci
+          sparse-checkout: actions
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: ./.rawz06-ci/actions/setup-rust
+        with:
+          toolchain: ${{ inputs.toolchain }}
+          linux-packages: ${{ inputs.linux-packages }}
+          components: ${{ inputs.checks && 'rustfmt, clippy' || '' }}
+          targets: ${{ inputs.image && 'x86_64-unknown-linux-musl' || '' }}${{ inputs.trunk-dir != '' && ', wasm32-unknown-unknown' || '' }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Set version
+        uses: ./.rawz06-ci/actions/set-version
+        with:
+          version: ${{ inputs.version }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Format
+        if: inputs.checks
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        if: inputs.checks
+        env:
+          ARGS: ${{ inputs.clippy-args }}
+        run: |
+          # shellcheck disable=SC2086 # arguments cargo
+          cargo clippy $ARGS
+
+      - name: Test
+        if: inputs.checks
+        env:
+          ARGS: ${{ inputs.test-args }}
+        run: |
+          # shellcheck disable=SC2086 # arguments cargo
+          cargo test $ARGS
+
+      - name: Build static binaries
+        if: inputs.image && inputs.binaries != ''
+        env:
+          BINARIES: ${{ inputs.binaries }}
+        run: |
+          mkdir -p bin
+          for package in $BINARIES; do
+            cargo build --release --locked --target "$MUSL_TARGET" -p "$package"
+            cp "target/$MUSL_TARGET/release/$package" bin/
+          done
+          file bin/*
+
+      - name: Build WASM client
+        if: inputs.image && inputs.trunk-dir != ''
+        env:
+          TRUNK_VERSION: ${{ inputs.trunk-version }}
+          TRUNK_DIR: ${{ inputs.trunk-dir }}
+        run: |
+          curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/${TRUNK_VERSION}/trunk-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP"
+          (cd "$TRUNK_DIR" && "$RUNNER_TEMP/trunk" build --release --locked)
+
+      - name: Prepare image context
+        if: inputs.image
+        uses: ./.rawz06-ci/actions/prepare-image-context
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          dockerfile: ${{ inputs.dockerfile }}
+          artifact-name: ${{ inputs.artifact-name }}
+          files: |
+            ${{ inputs.binaries != '' && 'bin' || '' }}
+            ${{ inputs.image-files }}
