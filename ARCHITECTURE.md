@@ -209,8 +209,8 @@ et choisit CI, Preview ou Release (`resolve-mode`, dans le job `_version`).
 | Mode | Déclencheur | Image | Release | Déploiement |
 |---|---|---|---|---|
 | `ci` | PR, push hors branche par défaut | construite et testée, non publiée | — | — |
-| `preview` | PR avec le label `preview`, ou bouton « preview » | `:<version>-rc.N`, `:preview`, `:pr-N` | — | app preprod (`DOKPLOY_PREVIEW_TOKEN`) |
-| `release` | push sur la branche par défaut, ou bouton « release » | `:<version>`, `:latest`, `:sha-…` | tag + GitHub Release | app prod (`DOKPLOY_TOKEN`) |
+| `preview` | PR avec le label `preview`, ou bouton « preview » | `:<version>-rc.N`, `:preview`, `:pr-N` | — | app preprod (`DOKPLOY_PREVIEW_WEBHOOK`) |
+| `release` | push sur la branche par défaut, ou bouton « release » | `:<version>`, `:latest`, `:sha-…` | tag + GitHub Release | app prod (`DOKPLOY_WEBHOOK`) |
 
 Un pipeline peut cumuler : RawZLinsoTrackerRust appellera `rust-app.yml` **et** `rust-desktop.yml`
 (serveur en image + client desktop en binaires). Les deux calculent la même version ; le second
@@ -262,7 +262,6 @@ jobs:
       packages: write
     with:
       image-name: seedgenerator
-      dokploy-url: ${{ vars.DOKPLOY_URL }}
     secrets: inherit
 ```
 
@@ -371,16 +370,18 @@ Plus tard : actions composites `package-macos-app` et `package-windows-installer
 
 ## 8. Déploiement (Dokploy) et secrets
 
-- Les jetons de webhook Dokploy actuellement visibles dans les YAML publics **doivent être régénérés**.
+- **Webhook uniquement** : c'est la méthode que Dokploy recommande pour redéployer depuis une CI
+  (« Webhook URL » de l'application, `https://<instance>/api/deploy/<jeton>`), pas l'API avec clé.
+- L'URL contient le jeton : elle se stocke **en secret, en entier**. Les jetons actuellement visibles
+  dans les YAML publics (`dokploy_app_id`) **doivent être régénérés** (bouton à côté de l'URL dans Dokploy).
 - Par projet :
 
-  | Nom | Type | Usage |
-  |---|---|---|
-  | `DOKPLOY_TOKEN` | secret | jeton du webhook de l'app prod |
-  | `DOKPLOY_PREVIEW_TOKEN` | secret | jeton du webhook de l'app preprod (absent = pas de preview) |
-  | `DOKPLOY_URL` | variable (org ou repo) | URL de l'instance Dokploy |
+  | Secret | Usage |
+  |---|---|
+  | `DOKPLOY_WEBHOOK` | URL du webhook de l'app de prod |
+  | `DOKPLOY_PREVIEW_WEBHOOK` | URL du webhook de l'app de preprod (absent = pas de déploiement preview) |
 
-  L'action `dokploy-deploy` accepte aussi l'API (`api-key` + `application-id`) à la place du webhook.
+- `dokploy-deploy` masque l'URL et le jeton dans les logs (seul l'hôte apparaît) et relance 3 fois en cas d'erreur.
 
 - Les apps Dokploy tirent `:latest` (prod) et `:preview` (preprod) ; le déploiement ne fait que déclencher le pull.
 - Environnements GitHub `production` et `preview` : historique des déploiements visible dans chaque repo.

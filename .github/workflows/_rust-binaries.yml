@@ -100,18 +100,10 @@ jobs:
         uses: ./.rawz06-ci/actions/setup-rust
         with:
           toolchain: ${{ inputs.toolchain }}
+          linux-packages: ${{ inputs.linux-packages }}
           targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin, x86_64-apple-darwin' || matrix.target }}
           working-directory: ${{ inputs.working-directory }}
           cache-key: ${{ matrix.name }}
-
-      - name: Install system packages
-        if: runner.os == 'Linux' && inputs.linux-packages != ''
-        env:
-          PACKAGES: ${{ inputs.linux-packages }}
-        run: |
-          sudo apt-get update -qq
-          # shellcheck disable=SC2086 # liste de paquets séparés par des espaces
-          sudo apt-get install -y -qq --no-install-recommends $PACKAGES
 
       - name: Export build environment
         if: inputs.build-env != ''

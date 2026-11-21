@@ -44,18 +44,6 @@ on:
         description: Texte attendu dans la sortie du test
         type: string
         default: ""
-      dokploy-url:
-        description: URL Dokploy (passer vars.DOKPLOY_URL)
-        type: string
-        default: ""
-      application-id:
-        description: Application Dokploy de prod, si déploiement par API (secret DOKPLOY_API_KEY)
-        type: string
-        default: ""
-      preview-application-id:
-        description: Application Dokploy de preprod, si déploiement par API
-        type: string
-        default: ""
       mode:
         description: "auto (déduit de l'événement) | release | preview | ci"
         type: string
@@ -69,14 +57,11 @@ on:
         type: string
         default: v1
     secrets:
-      DOKPLOY_TOKEN:
-        description: Jeton du webhook de l'app de prod
+      DOKPLOY_WEBHOOK:
+        description: URL du webhook Dokploy de l'app de prod
         required: false
-      DOKPLOY_PREVIEW_TOKEN:
-        description: Jeton du webhook de l'app de preprod
-        required: false
-      DOKPLOY_API_KEY:
-        description: Clé d'API Dokploy, à la place des webhooks
+      DOKPLOY_PREVIEW_WEBHOOK:
+        description: URL du webhook Dokploy de l'app de preprod (absent = pas de déploiement preview)
         required: false
     outputs:
       mode:
@@ -162,12 +147,9 @@ jobs:
       contents: read
     with:
       environment: production
-      url: ${{ inputs.dokploy-url }}
-      application-id: ${{ inputs.application-id }}
       tooling-ref: ${{ inputs.tooling-ref }}
     secrets:
-      webhook-token: ${{ secrets.DOKPLOY_TOKEN }}
-      api-key: ${{ inputs.application-id != '' && secrets.DOKPLOY_API_KEY || '' }}
+      webhook-url: ${{ secrets.DOKPLOY_WEBHOOK }}
 
   deploy-preview:
     needs: [version, image]
@@ -177,9 +159,6 @@ jobs:
       contents: read
     with:
       environment: preview
-      url: ${{ inputs.dokploy-url }}
-      application-id: ${{ inputs.preview-application-id }}
       tooling-ref: ${{ inputs.tooling-ref }}
     secrets:
-      webhook-token: ${{ secrets.DOKPLOY_PREVIEW_TOKEN }}
-      api-key: ${{ inputs.preview-application-id != '' && secrets.DOKPLOY_API_KEY || '' }}
+      webhook-url: ${{ secrets.DOKPLOY_PREVIEW_WEBHOOK }}

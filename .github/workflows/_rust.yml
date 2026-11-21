@@ -94,18 +94,10 @@ jobs:
         uses: ./.rawz06-ci/actions/setup-rust
         with:
           toolchain: ${{ inputs.toolchain }}
+          linux-packages: ${{ inputs.linux-packages }}
           components: ${{ inputs.checks && 'rustfmt, clippy' || '' }}
           targets: ${{ inputs.image && 'x86_64-unknown-linux-musl' || '' }}${{ inputs.trunk-dir != '' && ', wasm32-unknown-unknown' || '' }}
           working-directory: ${{ inputs.working-directory }}
-
-      - name: Install system packages
-        if: inputs.linux-packages != ''
-        env:
-          PACKAGES: ${{ inputs.linux-packages }}
-        run: |
-          sudo apt-get update -qq
-          # shellcheck disable=SC2086 # liste de paquets séparés par des espaces
-          sudo apt-get install -y -qq --no-install-recommends $PACKAGES
 
       - name: Set version
         uses: ./.rawz06-ci/actions/set-version

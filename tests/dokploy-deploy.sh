@@ -8,7 +8,7 @@ SCRIPT="$ROOT/actions/dokploy-deploy/deploy.sh"
 WORK="$(mktemp -d)"
 LOG="$WORK/requests.log"
 
-# Faux Dokploy : journalise chaque requête ; un jeton ou un id contenant "fail" renvoie 500.
+# Faux Dokploy : journalise chaque requête ; un jeton contenant "fail" renvoie 500.
 cat >"$WORK/server.py" <<'EOF'
 import http.server, json, sys
 
@@ -16,11 +16,8 @@ log = open(sys.argv[1], "a", buffering=1)
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def handle_any(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        body = self.rfile.read(length).decode() if length else ""
-        log.write(json.dumps({"method": self.command, "path": self.path,
-                              "key": self.headers.get("x-api-key"), "body": body}) + "\n")
-        status = 500 if "fail" in self.path + body else 200
+        log.write(json.dumps({"method": self.command, "path": self.path}) + "\n")
+        status = 500 if "fail" in self.path else 200
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
@@ -36,7 +33,7 @@ python3 "$WORK/server.py" "$LOG" >"$WORK/port" &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null; wait $SERVER 2>/dev/null; rm -rf "$WORK"' EXIT
 for _ in $(seq 1 50); do [ -s "$WORK/port" ] && break; sleep 0.1; done
-URL="http://127.0.0.1:$(cat "$WORK/port")"
+BASE="http://127.0.0.1:$(cat "$WORK/port")"
 
 failures=0
 count=0
@@ -60,37 +57,27 @@ run() {
   REQUESTS="$(cat "$LOG")"
 }
 
-run DOKPLOY_URL="$URL/" DOKPLOY_WEBHOOK_TOKEN=abc123
+run DOKPLOY_WEBHOOK_URL="$BASE/api/deploy/abc123/"
 check "webhook : succès" "$STATUS" "0"
 check "webhook : GET sur /api/deploy/<jeton>" "$REQUESTS" '"method": "GET", "path": "/api/deploy/abc123"'
+check "webhook : URL masquée" "$OUT" "::add-mask::$BASE/api/deploy/abc123"
 check "webhook : jeton masqué" "$OUT" "::add-mask::abc123"
+check "webhook : seul l'hôte est affiché" "$OUT" "Déploiement via le webhook de 127.0.0.1:"
 check "webhook : jeton absent du reste de la sortie" "$(grep -v add-mask <<<"$OUT" | grep -c abc123)" "0"
 
-run DOKPLOY_URL="$URL" DOKPLOY_API_KEY=key42 DOKPLOY_APPLICATION_ID=app-1
-check "api : succès" "$STATUS" "0"
-check "api : POST /api/application.deploy" "$REQUESTS" '"method": "POST", "path": "/api/application.deploy"'
-check "api : clé en en-tête" "$REQUESTS" '"key": "key42"'
-check "api : corps JSON" "$REQUESTS" '{\"applicationId\":\"app-1\"}'
-
-run DOKPLOY_URL="$URL" DOKPLOY_WEBHOOK_TOKEN=fail
+run DOKPLOY_WEBHOOK_URL="$BASE/api/deploy/fail"
 check "erreur serveur : échec" "$STATUS" "22"
 check "erreur serveur : 4 essais (1 + 3 relances)" "$(wc -l <<<"$REQUESTS" | tr -d ' ')" "4"
 check "erreur serveur : corps de la réponse affiché" "$OUT" "boom"
 
-run DOKPLOY_URL="$URL"
-check "aucun identifiant : erreur" "$OUT" "fournir webhook-token"
+run
+check "URL manquante : erreur" "$OUT" "URL du webhook Dokploy manquante"
 
-run DOKPLOY_URL="$URL" DOKPLOY_API_KEY=k
-check "api sans application-id : erreur" "$OUT" "application-id est obligatoire"
+run DOKPLOY_WEBHOOK_URL="$BASE/api/application.deploy"
+check "URL qui n'est pas un webhook : erreur" "$OUT" "URL de webhook Dokploy invalide"
 
-run DOKPLOY_URL="$URL" DOKPLOY_API_KEY=k DOKPLOY_APPLICATION_ID=a DOKPLOY_WEBHOOK_TOKEN=t
-check "webhook + api : erreur" "$OUT" "exclusifs"
-
-run DOKPLOY_URL="dokploy.example.com" DOKPLOY_WEBHOOK_TOKEN=t
-check "url sans schéma : erreur" "$OUT" "url Dokploy invalide"
-
-run DOKPLOY_WEBHOOK_TOKEN=t
-check "url manquante : erreur" "$OUT" "url Dokploy manquante"
+run DOKPLOY_WEBHOOK_URL="dokploy.example.com/api/deploy/abc"
+check "URL sans schéma : erreur" "$OUT" "URL de webhook Dokploy invalide"
 
 check "aucune requête sur les erreurs de configuration" "$(grep -c . <<<"$REQUESTS")" "0"
 

@@ -5,8 +5,8 @@
 #   push sur $default-branch → image :<version> + release + déploiement prod
 #   Actions > Pipeline > Run workflow : release ou preview à la demande, bump forcé
 #
-# Secrets du repo : DOKPLOY_TOKEN (webhook de l'app de prod), DOKPLOY_PREVIEW_TOKEN
-# (webhook de l'app de preprod, facultatif). Variable : DOKPLOY_URL (repo ou organisation).
+# Secrets du repo : DOKPLOY_WEBHOOK = « Webhook URL » de l'app de prod dans Dokploy,
+# DOKPLOY_PREVIEW_WEBHOOK = celle de l'app de preprod (facultatif).
 #
 name: Pipeline
 
@@ -43,5 +43,4 @@ jobs:
       packages: write
     with:
       image-name: mon-site
-      dokploy-url: ${{ vars.DOKPLOY_URL }}
     secrets: inherit

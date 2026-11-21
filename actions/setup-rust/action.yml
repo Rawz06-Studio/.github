@@ -2,7 +2,7 @@ name: Setup Rust
 description: >-
   Installe la toolchain Rust (rust-toolchain.toml du projet s'il existe), les targets
   et composants demandés, musl-tools pour les targets musl sous Linux, et met en cache
-  les dépendances compilées.
+  les dépendances compilées. Installe aussi les paquets apt demandés sous Linux.
 
 inputs:
   toolchain:
@@ -15,6 +15,10 @@ inputs:
     default: ""
   components:
     description: Composants supplémentaires, séparés par des virgules (ex. rustfmt, clippy)
+    required: false
+    default: ""
+  linux-packages:
+    description: Paquets apt à installer sous Linux (bibliothèques système), séparés par des espaces
     required: false
     default: ""
   working-directory:
@@ -42,6 +46,7 @@ runs:
         TOOLCHAIN: ${{ inputs.toolchain }}
         TARGETS: ${{ inputs.targets }}
         COMPONENTS: ${{ inputs.components }}
+        LINUX_PACKAGES: ${{ inputs.linux-packages }}
       run: |
         split() { tr ',' '\n' <<<"$1" | sed 's/^ *//;s/ *$//' | grep -v '^$' || true; }
         args=(--profile minimal)
@@ -57,10 +62,16 @@ runs:
           rustup default "$TOOLCHAIN"
         fi
 
-        if grep -q musl <<<"$TARGETS" && [ "$RUNNER_OS" = Linux ] && ! command -v musl-gcc >/dev/null; then
-          sudo_cmd=""; [ "$(id -u)" -ne 0 ] && sudo_cmd=sudo
-          $sudo_cmd apt-get update -qq
-          $sudo_cmd apt-get install -y -qq --no-install-recommends musl-tools
+        if [ "$RUNNER_OS" = Linux ]; then
+          read -ra packages <<<"$LINUX_PACKAGES"
+          if grep -q musl <<<"$TARGETS" && ! command -v musl-gcc >/dev/null; then
+            packages+=(musl-tools)
+          fi
+          if [ "${#packages[@]}" -gt 0 ]; then
+            sudo_cmd=""; [ "$(id -u)" -ne 0 ] && sudo_cmd=sudo
+            $sudo_cmd apt-get update -qq
+            $sudo_cmd apt-get install -y -qq --no-install-recommends "${packages[@]}"
+          fi
         fi
 
         rustc --version

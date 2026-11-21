@@ -36,8 +36,8 @@ Un seul fichier, `.github/workflows/pipeline.yml`, créé depuis *Actions → Ne
 | push sur la branche par défaut | `release` | image `:<version>`, tag + GitHub Release, déploiement prod |
 | *Run workflow* | au choix | release ou preview, bump `patch` / `minor` / `major` forcé |
 
-Secrets du projet : `DOKPLOY_TOKEN` (webhook de l'app de prod), `DOKPLOY_PREVIEW_TOKEN` (facultatif).
-Variable : `DOKPLOY_URL` (repo ou organisation).
+Secrets du projet : `DOKPLOY_WEBHOOK`, la « Webhook URL » de l'app de prod copiée depuis Dokploy,
+et `DOKPLOY_PREVIEW_WEBHOOK` pour l'app de preprod (facultatif).
 
 ### Actions disponibles
 
@@ -48,8 +48,8 @@ Variable : `DOKPLOY_URL` (repo ou organisation).
 | [`setup-java`](actions/setup-java/action.yml) | JDK (25 par défaut), cache Maven, accès GitHub Packages ; sortie `mvn` (`./mvnw` si présent) |
 | [`setup-node`](actions/setup-node/action.yml) | pnpm (`packageManager`), Node (`.nvmrc` ou 24), cache, registre `@rawz06-studio`, `pnpm install --frozen-lockfile` |
 | [`setup-php`](actions/setup-php/action.yml) | PHP 8.4 avec les extensions de `php-runtime`, Composer, cache, `composer install` |
-| [`setup-rust`](actions/setup-rust/action.yml) | Toolchain (`rust-toolchain.toml` ou stable), targets, composants, musl-tools, cache |
-| [`dokploy-deploy`](actions/dokploy-deploy/action.yml) | Déclenche un déploiement Dokploy (webhook ou API), jetons masqués, 3 relances |
+| [`setup-rust`](actions/setup-rust/action.yml) | Toolchain (`rust-toolchain.toml` ou stable), targets, composants, paquets apt, musl-tools, cache |
+| [`dokploy-deploy`](actions/dokploy-deploy/action.yml) | Appelle le webhook Dokploy de l'application, URL masquée, 3 relances |
 | [`resolve-mode`](actions/resolve-mode/action.yml) | Déduit le mode du run de l'événement (`release`, `preview`, `ci`) et le bump demandé |
 | [`prepare-image-context`](actions/prepare-image-context/action.yml) | Archive le Dockerfile et les fichiers du build (permissions et fichiers cachés conservés) en artefact pour `_docker` |
 

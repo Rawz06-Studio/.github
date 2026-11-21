@@ -1,8 +1,8 @@
 name: _deploy
 
-# Job réutilisable : déploiement Dokploy dans un environnement GitHub (historique des
-# déploiements visible dans le repo). Sans jeton fourni, le job réussit sans rien
-# déployer : un projet sans preprod n'a simplement pas de secret de preview.
+# Job réutilisable : déploiement Dokploy par webhook dans un environnement GitHub
+# (historique des déploiements visible dans le repo). Sans webhook fourni, le job
+# réussit sans rien déployer : un projet sans preprod n'a simplement pas ce secret.
 
 on:
   workflow_call:
@@ -11,23 +11,12 @@ on:
         description: Environnement GitHub (production, preview)
         type: string
         required: true
-      url:
-        description: URL de l'instance Dokploy (variable DOKPLOY_URL)
-        type: string
-        default: ""
-      application-id:
-        description: Identifiant de l'application, avec le secret api-key
-        type: string
-        default: ""
       tooling-ref:
         type: string
         default: v1
     secrets:
-      webhook-token:
-        description: Jeton du webhook de déploiement de l'application
-        required: false
-      api-key:
-        description: Clé d'API Dokploy, à la place du webhook
+      webhook-url:
+        description: URL du webhook de l'application Dokploy (https://<instance>/api/deploy/<jeton>)
         required: false
 
 permissions: {}
@@ -43,18 +32,15 @@ jobs:
       - name: Check configuration
         id: config
         env:
-          URL: ${{ inputs.url }}
-          HAS_WEBHOOK: ${{ secrets.webhook-token != '' }}
-          HAS_API_KEY: ${{ secrets.api-key != '' }}
+          HAS_WEBHOOK: ${{ secrets.webhook-url != '' }}
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
-          if [ "$HAS_WEBHOOK" != true ] && [ "$HAS_API_KEY" != true ]; then
-            echo "::notice::Pas de jeton Dokploy pour $ENVIRONMENT : rien à déployer"
+          if [ "$HAS_WEBHOOK" != true ]; then
+            echo "::notice::Pas de webhook Dokploy pour $ENVIRONMENT : rien à déployer"
             echo "deploy=false" >>"$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo "deploy=true" >>"$GITHUB_OUTPUT"
           fi
-          [ -n "$URL" ] || { echo "::error::URL Dokploy manquante (variable DOKPLOY_URL)"; exit 1; }
-          echo "deploy=true" >>"$GITHUB_OUTPUT"
 
       - name: Checkout CI tooling
         if: steps.config.outputs.deploy == 'true'
@@ -70,7 +56,4 @@ jobs:
         if: steps.config.outputs.deploy == 'true'
         uses: ./.rawz06-ci/actions/dokploy-deploy
         with:
-          url: ${{ inputs.url }}
-          webhook-token: ${{ secrets.webhook-token }}
-          api-key: ${{ secrets.api-key }}
-          application-id: ${{ inputs.application-id }}
+          webhook-url: ${{ secrets.webhook-url }}

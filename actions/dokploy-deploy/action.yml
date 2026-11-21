@@ -1,24 +1,12 @@
 name: Dokploy deploy
 description: >-
-  Déclenche le déploiement d'une application Dokploy, soit par son webhook
-  (jeton secret), soit par l'API (clé d'API + identifiant d'application).
+  Déclenche le redéploiement d'une application Dokploy en appelant son webhook
+  (méthode recommandée par Dokploy). L'URL contient un jeton : la passer en secret.
 
 inputs:
-  url:
-    description: URL de l'instance Dokploy (ex. https://dokploy.example.com)
+  webhook-url:
+    description: URL du webhook de l'application (https://<instance>/api/deploy/<jeton>), secret
     required: true
-  webhook-token:
-    description: Jeton du webhook de déploiement de l'application (secret)
-    required: false
-    default: ""
-  api-key:
-    description: Clé d'API Dokploy (secret), à la place du webhook
-    required: false
-    default: ""
-  application-id:
-    description: Identifiant de l'application, avec api-key
-    required: false
-    default: ""
 
 runs:
   using: composite
@@ -26,8 +14,5 @@ runs:
     - name: Deploy
       shell: bash
       env:
-        DOKPLOY_URL: ${{ inputs.url }}
-        DOKPLOY_WEBHOOK_TOKEN: ${{ inputs.webhook-token }}
-        DOKPLOY_API_KEY: ${{ inputs.api-key }}
-        DOKPLOY_APPLICATION_ID: ${{ inputs.application-id }}
+        DOKPLOY_WEBHOOK_URL: ${{ inputs.webhook-url }}
       run: "${GITHUB_ACTION_PATH}/deploy.sh"
