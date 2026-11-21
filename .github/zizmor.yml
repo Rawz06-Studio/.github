@@ -1,0 +1,5 @@
+# Configuration de zizmor (audit de sécurité des workflows).
+rules:
+  # La syntaxe `$/...` n'est pas encore reconnue par actionlint : on garde `./...`.
+  self-repository:
+    disable: true

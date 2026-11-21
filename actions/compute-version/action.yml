@@ -1,0 +1,71 @@
+name: Compute version
+description: >-
+  Calcule la prochaine version SemVer à partir du dernier tag de release et des
+  messages de commit (Conventional Commits). Ne crée ni tag ni commit.
+
+inputs:
+  mode:
+    description: "release | preview | ci"
+    required: false
+    default: release
+  bump:
+    description: "auto | patch | minor | major (auto = déduit des commits)"
+    required: false
+    default: auto
+  initial-version:
+    description: >-
+      Version exacte de la toute première release, utilisée seulement s'il n'existe
+      encore aucun tag. Vide = lue dans le projet (pom.xml, package.json, Cargo.toml).
+    required: false
+    default: ""
+  tag-prefix:
+    description: Préfixe des tags de release
+    required: false
+    default: v
+  working-directory:
+    description: Dossier où chercher le fichier projet pour la version initiale
+    required: false
+    default: .
+
+outputs:
+  version:
+    description: "Version à utiliser (ex: 1.4.3, 1.4.3-rc.12, 1.4.3-ci.abc1234)"
+    value: ${{ steps.compute.outputs.version }}
+  release-version:
+    description: Version de release correspondante, sans suffixe (ex. 1.4.3)
+    value: ${{ steps.compute.outputs.release-version }}
+  tag:
+    description: Tag de release correspondant (ex. v1.4.3)
+    value: ${{ steps.compute.outputs.tag }}
+  previous-tag:
+    description: Dernier tag de release, vide s'il n'y en a pas
+    value: ${{ steps.compute.outputs.previous-tag }}
+  bump:
+    description: "Bump appliqué : patch | minor | major | initial | none"
+    value: ${{ steps.compute.outputs.bump }}
+  exists:
+    description: "true si HEAD porte déjà le tag de release (relance d'un run)"
+    value: ${{ steps.compute.outputs.exists }}
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch tags and history
+      shell: bash
+      run: |
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          git fetch --quiet --prune --unshallow --tags
+        else
+          git fetch --quiet --prune --tags
+        fi
+
+    - name: Compute
+      id: compute
+      shell: bash
+      env:
+        MODE: ${{ inputs.mode }}
+        BUMP: ${{ inputs.bump }}
+        INITIAL_VERSION: ${{ inputs.initial-version }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
+        PROJECT_DIR: ${{ inputs.working-directory }}
+      run: "${GITHUB_ACTION_PATH}/compute-version.sh"

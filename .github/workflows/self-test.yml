@@ -1,0 +1,73 @@
+name: Self-test
+
+# Vérifie ce repo lui-même : lint des workflows, audit de sécurité, tests des scripts.
+# Appelé par self-release.yml avant chaque release.
+
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  # Workflows historiques, appelés en @main par les projets non migrés.
+  # Exclus du lint jusqu'à leur suppression (voir ARCHITECTURE.md §11).
+  LEGACY_WORKFLOWS: docker-build-push.yml maven-ci.yml maven-ci-preprod.yml maven-ci-release.yml maven-ci-snapshot.yml node-ci.yml node-ci-preprod.yml node-ci-release.yml
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Lint workflows
+        run: |
+          files=()
+          for f in .github/workflows/*.yml; do
+            case " $LEGACY_WORKFLOWS " in *" $(basename "$f") "*) continue ;; esac
+            files+=("$f")
+          done
+          docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color "${files[@]}"
+
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Audit workflows and actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(actions)
+          for f in .github/workflows/*.yml; do
+            case " $LEGACY_WORKFLOWS " in *" $(basename "$f") "*) continue ;; esac
+            files+=("$f")
+          done
+          pipx run zizmor --config .github/zizmor.yml --format=github "${files[@]}"
+
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: shellcheck
+        run: find actions tests -name '*.sh' -print0 | xargs -0 shellcheck
+
+      - name: compute-version
+        run: tests/compute-version.sh

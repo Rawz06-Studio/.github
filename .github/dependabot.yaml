@@ -1,52 +1,18 @@
 version: 2
 updates:
-  - package-ecosystem: maven
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      maven-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-      maven-major:
-        update-types:
-          - "major"
-    labels:
-      - "dependencies"
-      - "maven"
-
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      npm-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-      npm-major:
-        update-types:
-          - "major"
-    labels:
-      - "dependencies"
-      - "npm"
-
+  # Actions utilisées par les workflows et par les actions composites de ce repo.
   - package-ecosystem: github-actions
-    directory: /
+    directories:
+      - /
+      - /actions/*
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
       actions-minor-patch:
-        update-types:
-          - "minor"
-          - "patch"
-      actions-major:
-        update-types:
-          - "major"
+        update-types: [minor, patch]
     labels:
-      - "dependencies"
-      - "github-actions"
+      - dependencies
+      - github-actions
+
+  # Les images de base (images/*) seront ajoutées ici à l'étape 2.
