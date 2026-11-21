@@ -1,0 +1,73 @@
+name: Setup Rust
+description: >-
+  Installe la toolchain Rust (rust-toolchain.toml du projet s'il existe), les targets
+  et composants demandés, musl-tools pour les targets musl sous Linux, et met en cache
+  les dépendances compilées.
+
+inputs:
+  toolchain:
+    description: Toolchain. Vide = rust-toolchain.toml du projet s'il existe, sinon stable.
+    required: false
+    default: ""
+  targets:
+    description: Targets supplémentaires, séparées par des virgules (ex. x86_64-unknown-linux-musl, wasm32-unknown-unknown)
+    required: false
+    default: ""
+  components:
+    description: Composants supplémentaires, séparés par des virgules (ex. rustfmt, clippy)
+    required: false
+    default: ""
+  working-directory:
+    description: Dossier du projet (contient Cargo.toml)
+    required: false
+    default: .
+  cache-key:
+    description: Clé supplémentaire du cache (ex. la target d'une matrice)
+    required: false
+    default: ""
+
+outputs:
+  rustc-version:
+    description: Version de rustc installée
+    value: ${{ steps.install.outputs.rustc-version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install toolchain
+      id: install
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        TARGETS: ${{ inputs.targets }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        split() { tr ',' '\n' <<<"$1" | sed 's/^ *//;s/ *$//' | grep -v '^$' || true; }
+        args=(--profile minimal)
+        while IFS= read -r c; do args+=(--component "$c"); done < <(split "$COMPONENTS")
+        while IFS= read -r t; do args+=(--target "$t"); done < <(split "$TARGETS")
+
+        if [ -z "$TOOLCHAIN" ] && { [ -f rust-toolchain.toml ] || [ -f rust-toolchain ]; }; then
+          # Sans argument, rustup installe la toolchain décrite par le fichier du projet.
+          rustup toolchain install "${args[@]}"
+        else
+          TOOLCHAIN="${TOOLCHAIN:-stable}"
+          rustup toolchain install "$TOOLCHAIN" "${args[@]}"
+          rustup default "$TOOLCHAIN"
+        fi
+
+        if grep -q musl <<<"$TARGETS" && [ "$RUNNER_OS" = Linux ] && ! command -v musl-gcc >/dev/null; then
+          sudo_cmd=""; [ "$(id -u)" -ne 0 ] && sudo_cmd=sudo
+          $sudo_cmd apt-get update -qq
+          $sudo_cmd apt-get install -y -qq --no-install-recommends musl-tools
+        fi
+
+        rustc --version
+        echo "rustc-version=$(rustc --version | cut -d' ' -f2)" >>"$GITHUB_OUTPUT"
+
+    - name: Cache Cargo
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        workspaces: ${{ inputs.working-directory }}
+        key: ${{ inputs.cache-key }}

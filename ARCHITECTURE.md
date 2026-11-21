@@ -72,10 +72,10 @@ Une action unique `set-version` détecte la stack :
 
 | Stack | Fichier dans le repo | Injection |
 |---|---|---|
-| Maven | `<version>${revision}</version>` + `<revision>0.0.0-SNAPSHOT</revision>` | `-Drevision=1.4.3` |
+| Maven | `<version>${revision}</version>` + `<revision>0.0.0-SNAPSHOT</revision>` | `-Drevision=1.4.3` ajouté à `.mvn/maven.config` (lu par `mvn` et `mvnw`) ; une version littérale est refusée |
 | Node | `"version": "0.0.0"` | `pnpm pkg set version=1.4.3` |
-| Rust | `version = "0.0.0"` (package ou workspace) | réécriture de `Cargo.toml` + `Cargo.lock` |
-| PHP | — | variable d'env / fichier `VERSION` généré |
+| Rust | `version = "0.0.0"` (package ou workspace) | réécriture de `Cargo.toml` + entrées locales de `Cargo.lock` (`--locked` reste valide) |
+| PHP | — | fichier `VERSION` généré à côté de `composer.json` |
 
 ### Lecture de la version à l'exécution
 
@@ -329,9 +329,11 @@ Plus tard : actions composites `package-macos-app` et `package-windows-installer
 
   | Nom | Type | Usage |
   |---|---|---|
-  | `DOKPLOY_TOKEN` | secret | déploiement prod |
-  | `DOKPLOY_PREVIEW_TOKEN` | secret | déploiement preprod (absent = pas de preview) |
+  | `DOKPLOY_TOKEN` | secret | jeton du webhook de l'app prod |
+  | `DOKPLOY_PREVIEW_TOKEN` | secret | jeton du webhook de l'app preprod (absent = pas de preview) |
   | `DOKPLOY_URL` | variable (org ou repo) | URL de l'instance Dokploy |
+
+  L'action `dokploy-deploy` accepte aussi l'API (`api-key` + `application-id`) à la place du webhook.
 
 - Les apps Dokploy tirent `:latest` (prod) et `:preview` (preprod) ; le déploiement ne fait que déclencher le pull.
 - Environnements GitHub `production` et `preview` : historique des déploiements visible dans chaque repo.

@@ -1,0 +1,54 @@
+name: Setup Java
+description: >-
+  Installe le JDK, met en cache le dépôt Maven et configure l'accès à GitHub Packages
+  (serveur `github`). Les étapes Maven qui lisent GitHub Packages doivent définir
+  MAVEN_USERNAME et MAVEN_PASSWORD dans leur `env:`.
+
+inputs:
+  java-version:
+    description: Version du JDK
+    required: false
+    default: "25"
+  distribution:
+    description: Distribution du JDK
+    required: false
+    default: temurin
+  working-directory:
+    description: Dossier du projet Maven
+    required: false
+    default: .
+
+outputs:
+  mvn:
+    description: Commande Maven à utiliser (./mvnw si le wrapper est présent, sinon mvn)
+    value: ${{ steps.maven.outputs.mvn }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK
+      uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+      with:
+        java-version: ${{ inputs.java-version }}
+        distribution: ${{ inputs.distribution }}
+        cache: maven
+        cache-dependency-path: ${{ inputs.working-directory }}/**/pom.xml
+        # settings.xml généré avec ${env.MAVEN_USERNAME} / ${env.MAVEN_PASSWORD} :
+        # le jeton n'est jamais écrit sur le disque.
+        server-id: github
+        server-username: MAVEN_USERNAME
+        server-password: MAVEN_PASSWORD
+
+    - name: Configure Maven
+      id: maven
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ -f mvnw ]; then
+          chmod +x mvnw
+          echo "mvn=./mvnw" >>"$GITHUB_OUTPUT"
+        else
+          echo "mvn=mvn" >>"$GITHUB_OUTPUT"
+        fi
+        # Options lues par toutes les commandes mvn / mvnw du job.
+        echo "MAVEN_ARGS=--batch-mode --no-transfer-progress --errors" >>"$GITHUB_ENV"

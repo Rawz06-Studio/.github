@@ -1,0 +1,30 @@
+name: Set version
+description: >-
+  Écrit la version dans le workspace (jamais committée) pour que le build l'embarque :
+  pom.xml en ${revision} via .mvn/maven.config, package.json, Cargo.toml + Cargo.lock,
+  fichier VERSION pour PHP.
+
+inputs:
+  version:
+    description: Version à injecter (ex. 1.4.3, 1.4.3-rc.12)
+    required: true
+  working-directory:
+    description: Dossier du projet
+    required: false
+    default: .
+
+outputs:
+  stacks:
+    description: Stacks détectées et mises à jour, séparées par des espaces (maven node rust php)
+    value: ${{ steps.set.outputs.stacks }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set version
+      id: set
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        PROJECT_DIR: ${{ inputs.working-directory }}
+      run: python3 "${GITHUB_ACTION_PATH}/set-version.py" "$PROJECT_DIR" "$VERSION"

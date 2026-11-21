@@ -18,7 +18,16 @@ Workflows CI/CD partagés, actions composites et images de base des projets Rawz
 
 | Action | Rôle |
 |---|---|
-| [`compute-version`](actions/compute-version) | Calcule la prochaine version depuis les tags et les Conventional Commits |
+| [`compute-version`](actions/compute-version/action.yml) | Calcule la prochaine version depuis les tags et les Conventional Commits |
+| [`set-version`](actions/set-version/action.yml) | Injecte la version dans le workspace : `.mvn/maven.config` (pom en `${revision}`), `package.json`, `Cargo.toml` + `Cargo.lock`, `VERSION` (PHP) |
+| [`setup-java`](actions/setup-java/action.yml) | JDK (25 par défaut), cache Maven, accès GitHub Packages ; sortie `mvn` (`./mvnw` si présent) |
+| [`setup-node`](actions/setup-node/action.yml) | pnpm (`packageManager`), Node (`.nvmrc` ou 24), cache, registre `@rawz06-studio`, `pnpm install --frozen-lockfile` |
+| [`setup-php`](actions/setup-php/action.yml) | PHP 8.4 avec les extensions de `php-runtime`, Composer, cache, `composer install` |
+| [`setup-rust`](actions/setup-rust/action.yml) | Toolchain (`rust-toolchain.toml` ou stable), targets, composants, musl-tools, cache |
+| [`dokploy-deploy`](actions/dokploy-deploy/action.yml) | Déclenche un déploiement Dokploy (webhook ou API), jetons masqués, 3 relances |
+
+Les étapes Maven qui lisent GitHub Packages définissent `MAVEN_USERNAME: ${{ github.actor }}` et
+`MAVEN_PASSWORD: ${{ github.token }}` dans leur `env:` : le jeton n'est jamais écrit sur le disque.
 
 ### Images de base
 
@@ -53,6 +62,20 @@ Chaque push sur `main` publie une release (`vX.Y.Z`). À partir de la 1.0.0, le 
 tests/compute-version.sh
 ```
 
+```bash
+tests/set-version.sh
+```
+
+```bash
+tests/dokploy-deploy.sh
+```
+
+Mini-projets de `tests/fixtures/` (Maven, pnpm, Composer et Cargo installés en local) :
+
+```bash
+tests/fixtures.sh
+```
+
 Images de base (Docker requis) :
 
 ```bash
@@ -63,5 +86,5 @@ for n in $(jq -r '.[].name' images/images.json); do docker build -t "local/${n}:
 tests/base-images.sh
 ```
 
-En CI, `self-test.yml` lance aussi actionlint, zizmor, hadolint et shellcheck ;
+En CI, `self-test.yml` lance aussi actionlint, zizmor, hadolint, shellcheck et chaque action `setup-*` sur sa fixture ;
 `base-images.yml` reconstruit et teste chaque image sur les deux architectures.

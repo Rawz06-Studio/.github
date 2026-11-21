@@ -86,3 +86,106 @@ jobs:
 
       - name: compute-version
         run: tests/compute-version.sh
+
+      - name: set-version
+        run: tests/set-version.sh
+
+      - name: dokploy-deploy
+        run: tests/dokploy-deploy.sh
+
+  # Les actions setup-* sur de vrais mini-projets : installation, cache, build versionné.
+  setup-java:
+    name: setup-java
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        id: java
+        uses: ./actions/setup-java
+        with:
+          working-directory: tests/fixtures/maven
+
+      - name: Build fixture
+        env:
+          MVN: ${{ steps.java.outputs.mvn }}
+          MAVEN_USERNAME: ${{ github.actor }}
+          MAVEN_PASSWORD: ${{ github.token }}
+        run: tests/fixtures.sh maven
+
+  setup-node:
+    name: setup-node
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: ./actions/setup-node
+        with:
+          working-directory: tests/fixtures/node
+
+      - name: Build fixture
+        run: tests/fixtures.sh node
+
+      - name: set-version (action)
+        id: set
+        uses: ./actions/set-version
+        with:
+          version: v9.9.9
+          working-directory: tests/fixtures/node
+
+      - name: Check action output
+        env:
+          STACKS: ${{ steps.set.outputs.stacks }}
+        run: |
+          test "$STACKS" = node
+          grep -q '"version": "9.9.9"' tests/fixtures/node/package.json
+
+  setup-php:
+    name: setup-php
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: ./actions/setup-php
+        with:
+          working-directory: tests/fixtures/php
+
+      - name: Build fixture
+        run: tests/fixtures.sh php
+
+  setup-rust:
+    name: setup-rust
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: ./actions/setup-rust
+        with:
+          targets: x86_64-unknown-linux-musl
+          working-directory: tests/fixtures/rust
+
+      - name: Build fixture (dont binaire statique musl)
+        env:
+          RUST_TARGET: x86_64-unknown-linux-musl
+        run: tests/fixtures.sh rust

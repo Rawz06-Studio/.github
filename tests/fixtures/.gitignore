@@ -1,0 +1,8 @@
+# Produits par les tests (set-version, builds)
+maven/.mvn/
+maven/target/
+node/node_modules/
+node/dist/
+php/vendor/
+php/VERSION
+rust/target/
